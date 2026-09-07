@@ -1,4 +1,13 @@
-import { app, BrowserWindow, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Notification,
+  clipboard,
+  dialog,
+  ipcMain,
+  shell,
+} from "electron";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,6 +25,90 @@ function isAllowedExternalUrl(rawUrl) {
   } catch {
     return false;
   }
+}
+
+function assertTrustedSender(event) {
+  const senderUrl = event.senderFrame?.url ?? event.sender.getURL();
+  if (!senderUrl) throw new Error("Unable to verify the desktop request origin.");
+
+  const expected = isDev ? devUrl : productionUrl;
+  if (!expected) throw new Error("Dami desktop has no configured trusted web origin.");
+
+  if (new URL(senderUrl).origin !== new URL(expected).origin) {
+    throw new Error("Blocked an untrusted desktop request.");
+  }
+}
+
+function registerDesktopIpc() {
+  ipcMain.handle("dami:open-file", async (event) => {
+    assertTrustedSender(event);
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [
+        { name: "Legal documents", extensions: ["txt", "md", "json", "csv"] },
+        { name: "All files", extensions: ["*"] },
+      ],
+    });
+
+    if (result.canceled || !result.filePaths[0]) return null;
+
+    const selectedPath = result.filePaths[0];
+    const stats = await fs.stat(selectedPath);
+    if (stats.size > 10 * 1024 * 1024) {
+      throw new Error("For safety, Dami currently opens text files up to 10 MB.");
+    }
+
+    const content = await fs.readFile(selectedPath, "utf8");
+    return { name: path.basename(selectedPath), path: selectedPath, content };
+  });
+
+  ipcMain.handle("dami:save-file", async (event, input) => {
+    assertTrustedSender(event);
+    if (!input || typeof input.content !== "string") throw new Error("Missing file content.");
+
+    const suggestedName =
+      typeof input.suggestedName === "string" && input.suggestedName.trim()
+        ? input.suggestedName.trim()
+        : "dami-research-note.md";
+
+    const result = await dialog.showSaveDialog({
+      defaultPath: suggestedName,
+      filters: [
+        { name: "Markdown", extensions: ["md"] },
+        { name: "Text", extensions: ["txt"] },
+        { name: "JSON", extensions: ["json"] },
+      ],
+    });
+
+    if (result.canceled || !result.filePath) return null;
+    await fs.writeFile(result.filePath, input.content, "utf8");
+    return { path: result.filePath };
+  });
+
+  ipcMain.handle("dami:clipboard-write", (event, text) => {
+    assertTrustedSender(event);
+    if (typeof text !== "string") throw new Error("Clipboard content must be text.");
+    clipboard.writeText(text);
+    return true;
+  });
+
+  ipcMain.handle("dami:notify", (event, input) => {
+    assertTrustedSender(event);
+    if (!Notification.isSupported()) return false;
+    const title = typeof input?.title === "string" ? input.title.slice(0, 120) : "Dami AI";
+    const body = typeof input?.body === "string" ? input.body.slice(0, 500) : "";
+    new Notification({ title, body }).show();
+    return true;
+  });
+
+  ipcMain.handle("dami:open-external", async (event, url) => {
+    assertTrustedSender(event);
+    if (typeof url !== "string" || !isAllowedExternalUrl(url)) {
+      throw new Error("Dami only opens secure HTTPS links externally.");
+    }
+    await shell.openExternal(url);
+    return true;
+  });
 }
 
 async function createMainWindow() {
@@ -73,6 +166,7 @@ async function createMainWindow() {
 }
 
 app.whenReady().then(async () => {
+  registerDesktopIpc();
   await createMainWindow();
 
   app.on("activate", async () => {
