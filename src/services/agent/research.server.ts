@@ -1,11 +1,9 @@
 /**
  * Dami's legal reasoning agent — SERVER ONLY.
  *
- * Contract: the model may only reason over passages handed to it by the
- * retrieval layer, and may only reference sources by their corpus id. Titles,
- * locators and URLs are attached afterwards by the citation builder, so a
- * fabricated authority cannot reach the user. When the retrieved evidence is
- * inadequate the model must say so.
+ * The model reasons over evidence supplied by retrieval and may reference only
+ * source ids that exist in that evidence. Citation metadata is attached after
+ * generation, preventing fabricated authorities from reaching the UI.
  */
 
 import { buildCitations } from "@/services/citations/citations";
@@ -25,17 +23,37 @@ export class ResearchError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `You are Dami, a voice-first legal research assistant for Ghana. Your motto is "A Voice for Justice".
+const SYSTEM_PROMPT = `You are Dami, an African legal AI agent. Your motto is "A Voice for Justice".
 
-ABSOLUTE RULES
-1. Reason ONLY from the SOURCES block supplied in the user message. It is your entire evidence base.
-2. Never invent or assert a case name, party name, judge, statute number, section, quotation, date or URL. If it is not in the SOURCES block, you do not know it.
-3. The SOURCES entries are citation-level records (title, authority, locator, topical description). They are NOT the full text of the instrument. Never present their descriptions as quotations, and never claim to have read the full text.
-4. Cite by "sourceIds" only, using the exact ids given. Cite only sources you actually relied on.
-5. If the sources do not adequately answer the question, set insufficientEvidence to true, explain the gap plainly, and point the user to the official repositories listed. Do not guess.
-6. Speak plainly. The answer will be read aloud, so use short sentences, no markdown, no bullet characters, no headings.
-7. Understand Ghanaian-accented English and Akan-English code-switching in the question; always answer in clear English unless the user explicitly asks otherwise.
-8. Always be clear that this is legal information and research assistance, not a substitute for advice from a qualified lawyer.
+IDENTITY AND EXPERIENCE
+- You assist lawyers, legal researchers, students, public-service teams and people seeking legal information.
+- You are not a Ghana-only product. Treat jurisdiction as part of the user's legal question and never assume a country when it matters.
+- Sound like a capable legal research partner, not a search-results page. Understand what the user is actually trying to accomplish and answer that task directly.
+- Be conversational, context-aware and useful. Do not give bland generic summaries when the evidence supports a precise answer.
+- Where useful, explain the practical effect of the authority, how it applies to the user's stated facts, what remains uncertain, and the next sensible research step.
+
+EVIDENCE RULES
+1. For this request, reason ONLY from the SOURCES block supplied in the user message. It is your verified evidence base.
+2. Never invent or assert a case name, party name, judge, statute number, section, quotation, date or URL. If it is not in SOURCES, you do not know it.
+3. Source descriptions are not quotations. Never present a summary as quoted statutory or judicial language.
+4. Cite by sourceIds only, using exact ids supplied. Cite only authorities you actually relied on.
+5. Pay attention to jurisdiction. Never apply an authority from one jurisdiction as binding law in another. You may explain persuasive relevance only when the source supports doing so.
+6. If evidence is inadequate, set insufficientEvidence=true. Explain exactly what is missing instead of filling gaps with general legal knowledge.
+7. Distinguish legal information/research assistance from advice tailored by a qualified lawyer.
+
+ANSWER QUALITY
+- Start with the answer the user needs, not a generic disclaimer.
+- Use precise plain language that a practitioner can act on.
+- Identify the controlling or strongest available authority first.
+- Connect the authority to the user's actual question or facts.
+- Mention uncertainty only where it exists.
+- Avoid filler such as "it depends" unless you immediately explain what it depends on.
+- Do not dump links without explaining why each source matters.
+- The answer may be read aloud: use natural paragraphs and short sentences; no markdown headings or bullet symbols inside the answer field.
+
+LANGUAGE
+- Understand African-accented English and code-switching.
+- Answer in the language the user used when you can do so reliably; otherwise use clear English without pretending fluency.
 
 Return JSON only, matching the schema exactly.`;
 
@@ -60,6 +78,7 @@ function renderSources(results: RetrievedPassage[]): string {
         `[${index + 1}] id: ${s.id}`,
         `title: ${s.title}`,
         `authority: ${s.authority}`,
+        `jurisdiction: ${s.jurisdiction}`,
         `type: ${s.docType}`,
         `locator: ${s.locator}`,
         `year: ${s.year ?? "unknown"}`,
@@ -103,30 +122,25 @@ function extractJson(payload: unknown): ModelOutput {
 
 export async function research(question: string): Promise<ResearchAnswer> {
   const trimmed = question.trim();
-  if (!trimmed) {
-    throw new ResearchError("Ask Dami a question first.", 400);
-  }
+  if (!trimmed) throw new ResearchError("Ask Dami a question first.", 400);
 
   const results = retrieve(trimmed);
 
   if (results.length === 0) {
     return {
       answer:
-        "Dami could not find an authority in its verified Ghanaian corpus that speaks to this question, so it will not attempt an answer.",
+        "I don't have a verified authority in the current local corpus that is strong enough to answer this safely. I won't turn a weak match into a legal conclusion. Tell me the jurisdiction if you haven't already, or use live web research once that source connector is enabled.",
       keyFindings: [],
       citations: [],
       insufficientEvidence: true,
       limitations:
-        "Dami's corpus currently covers core Ghanaian constitutional provisions, principal statutes and official public-service portals. Nothing in it matched this question closely enough to ground an answer. Try rephrasing, or consult the Judicial Service of Ghana, GhaLII or the Legal Aid Commission directly.",
+        "The built-in verified corpus is still being expanded across African jurisdictions. Dami should use authoritative court, legislation and government sources for jurisdictions not yet covered locally rather than guessing from general model knowledge.",
     };
   }
 
   const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) {
-    throw new ResearchError(
-      "Dami's reasoning service isn't configured on this server yet.",
-      503,
-    );
+    throw new ResearchError("Dami's reasoning service isn't configured on this server yet.", 503);
   }
 
   const response = await fetch(GATEWAY_URL, {
@@ -155,8 +169,8 @@ export async function research(question: string): Promise<ResearchAnswer> {
               type: "input_text",
               text: `QUESTION:\n${trimmed}\n\nRETRIEVAL NOTE: ${
                 isInsufficient(results)
-                  ? "The retrieval scores are weak. Be especially cautious and prefer to report insufficient evidence."
-                  : "These are the highest-ranked verified sources for this question."
+                  ? "The retrieval scores are weak. Be especially cautious and report the precise evidence gap if the sources do not support a useful conclusion."
+                  : "These are the highest-ranked verified sources currently available for this question."
               }\n\nSOURCES:\n${renderSources(results)}`,
             },
           ],
@@ -171,10 +185,7 @@ export async function research(question: string): Promise<ResearchAnswer> {
       throw new ResearchError("Dami is handling a lot of questions right now. Try again shortly.", 429);
     }
     if (response.status === 402) {
-      throw new ResearchError(
-        "Dami's research allowance has run out. The workspace owner needs to top up AI credits.",
-        402,
-      );
+      throw new ResearchError("Dami's research allowance has run out.", 402);
     }
     if (response.status === 403) {
       throw new ResearchError("Dami's research service is blocked by workspace policy.", 403);
@@ -193,6 +204,6 @@ export async function research(question: string): Promise<ResearchAnswer> {
     insufficientEvidence: Boolean(output.insufficientEvidence) || citations.length === 0,
     limitations:
       output.limitations ||
-      "Dami provides legal information and research assistance. Verify every authority at its official source before relying on it.",
+      "Dami provides legal information and research assistance. Verify important authorities at their official source before relying on them in practice.",
   };
 }
