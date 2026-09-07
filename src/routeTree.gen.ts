@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AskRouteImport } from './routes/ask'
+import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ResearchRouteImport } from './routes/research'
 import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as ApiSaharaSttRouteImport } from './routes/api/sahara.stt'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const AskRoute = AskRouteImport.update({
   id: '/ask',
   path: '/ask',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocumentsRoute = DocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResearchRoute = ResearchRouteImport.update({
@@ -50,6 +56,7 @@ const ApiSaharaTtsRoute = ApiSaharaTtsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/documents': typeof DocumentsRoute
   '/research': typeof ResearchRoute
   '/sources': typeof SourcesRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/documents': typeof DocumentsRoute
   '/research': typeof ResearchRoute
   '/sources': typeof SourcesRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/documents': typeof DocumentsRoute
   '/research': typeof ResearchRoute
   '/sources': typeof SourcesRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/ask'
+    | '/documents'
     | '/research'
     | '/sources'
     | '/api/sahara/stt'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/ask'
+    | '/documents'
     | '/research'
     | '/sources'
     | '/api/sahara/stt'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/ask'
+    | '/documents'
     | '/research'
     | '/sources'
     | '/api/sahara/stt'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AskRoute: typeof AskRoute
+  DocumentsRoute: typeof DocumentsRoute
   ResearchRoute: typeof ResearchRoute
   SourcesRoute: typeof SourcesRoute
   ApiSaharaSttRoute: typeof ApiSaharaSttRoute
@@ -122,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/ask'
       fullPath: '/ask'
       preLoaderRoute: typeof AskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/documents': {
+      id: '/documents'
+      path: '/documents'
+      fullPath: '/documents'
+      preLoaderRoute: typeof DocumentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/research': {
@@ -158,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AskRoute: AskRoute,
+  DocumentsRoute: DocumentsRoute,
   ResearchRoute: ResearchRoute,
   SourcesRoute: SourcesRoute,
   ApiSaharaSttRoute: ApiSaharaSttRoute,
