@@ -1,15 +1,18 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "dami-ai-core",
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "main": "desktop/main.mjs",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "desktop": "electron .",
+    "desktop:dev": "concurrently -k \"vite dev\" \"wait-on http://localhost:3000 && electron .\""
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -75,16 +78,19 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "concurrently": "^9.2.1",
+    "electron": "^38.1.2",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-hooks": "^6.0.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "8.1.5"
+    "vite": "8.1.5",
+    "wait-on": "^8.0.4"
   }
 }

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Trash2 } from "lucide-react";
+import { ExternalLink, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AnswerPanel } from "@/components/AnswerPanel";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STORAGE_EVENT, storage } from "@/lib/storage";
 import type { ResearchSession } from "@/lib/types";
+import type { WebSearchResult } from "@/services/tools/interfaces";
+import { searchOfficialSources } from "@/services/tools/web.client";
 
 export const Route = createFileRoute("/research")({
   head: () => ({
@@ -33,6 +35,7 @@ export const Route = createFileRoute("/research")({
 function ResearchPage() {
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [supplementalSources, setSupplementalSources] = useState<WebSearchResult[]>([]);
 
   useEffect(() => {
     const load = () => setSessions(storage.listSessions());
@@ -42,6 +45,28 @@ function ResearchPage() {
   }, []);
 
   const open = sessions.find((session) => session.id === openId) ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    setSupplementalSources([]);
+
+    if (!open) return () => {
+      cancelled = true;
+    };
+
+    void searchOfficialSources(open.question)
+      .then((results) => {
+        if (!cancelled) setSupplementalSources(results);
+      })
+      .catch(() => {
+        // Supplemental discovery should never interrupt the user's research flow.
+        // The grounded answer remains the source of truth if enrichment is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   return (
     <AppShell>
@@ -88,9 +113,45 @@ function ResearchPage() {
             ))}
           </div>
 
-          <div>
+          <div className="space-y-6">
             {open ? (
-              <AnswerPanel question={open.question} answer={open.answer} session={open} />
+              <>
+                <AnswerPanel question={open.question} answer={open.answer} session={open} />
+
+                {supplementalSources.length > 0 && (
+                  <section className="rounded-xl border border-border/70 p-5">
+                    <div>
+                      <h2 className="font-semibold">Related authorities</h2>
+                      <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                        Additional official material that may be useful alongside Dami's saved answer.
+                      </p>
+                    </div>
+                    <div className="mt-5 space-y-3">
+                      {supplementalSources.map((result) => (
+                        <a
+                          key={result.url}
+                          href={result.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block rounded-lg border border-border/70 p-4 transition-colors hover:bg-muted/40"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <h3 className="text-sm font-medium leading-snug">{result.title}</h3>
+                              {result.snippet && (
+                                <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+                                  {result.snippet}
+                                </p>
+                              )}
+                            </div>
+                            <ExternalLink className="h-4 w-4 shrink-0 text-primary" />
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </>
             ) : (
               <p className="rounded-xl border border-dashed border-border/70 p-10 text-center text-sm text-muted-foreground">
                 Pick a question to read the full answer.

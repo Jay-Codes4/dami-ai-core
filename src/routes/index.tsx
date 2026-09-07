@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Mic, ScrollText, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -44,11 +44,20 @@ function useSessions() {
 
 function Home() {
   const sessions = useSessions().slice(0, 3);
+  const navigate = useNavigate();
 
   return (
     <AppShell>
       <section className="flex flex-col items-center gap-8 py-6 text-center">
-        <DamiAvatar state="welcome" size={240} />
+        <div className="space-y-2">
+          <DamiAvatar
+            state="welcome"
+            size={240}
+            activationLabel="Talk with Dami"
+            onActivate={() => void navigate({ to: "/ask" })}
+          />
+          <p className="text-xs font-medium text-muted-foreground">Tap Dami to start</p>
+        </div>
         <div className="space-y-4">
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">
             A Voice for Justice
@@ -115,10 +124,7 @@ function Home() {
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <p className="line-clamp-3">{session.answer.answer}</p>
-                  <Link
-                    to="/research"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
-                  >
+                  <Link to="/research" className="inline-flex items-center gap-1 text-primary hover:underline">
                     Open <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </CardContent>

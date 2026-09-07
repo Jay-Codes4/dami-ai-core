@@ -53,35 +53,26 @@
 
 :root {
   --radius: 1rem;
-
   --background: oklch(0.995 0.004 250);
   --foreground: oklch(0.22 0.045 258);
-
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.22 0.045 258);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.045 258);
-
   --primary: oklch(0.54 0.185 257);
   --primary-foreground: oklch(0.99 0.005 250);
-
   --secondary: oklch(0.955 0.022 250);
   --secondary-foreground: oklch(0.32 0.09 258);
-
   --muted: oklch(0.965 0.014 250);
   --muted-foreground: oklch(0.52 0.045 256);
-
   --accent: oklch(0.93 0.045 250);
   --accent-foreground: oklch(0.32 0.11 258);
-
   --surface: oklch(0.972 0.018 248);
   --surface-foreground: oklch(0.28 0.06 258);
-
   --destructive: oklch(0.55 0.19 25);
   --destructive-foreground: oklch(0.99 0.005 250);
   --success: oklch(0.55 0.12 200);
   --success-foreground: oklch(0.99 0.005 250);
-
   --border: oklch(0.9 0.02 250);
   --input: oklch(0.9 0.02 250);
   --ring: oklch(0.54 0.185 257);
@@ -90,53 +81,38 @@
 .dark {
   --background: oklch(0.19 0.045 259);
   --foreground: oklch(0.97 0.008 250);
-
   --card: oklch(0.235 0.05 259);
   --card-foreground: oklch(0.97 0.008 250);
   --popover: oklch(0.235 0.05 259);
   --popover-foreground: oklch(0.97 0.008 250);
-
   --primary: oklch(0.68 0.155 253);
   --primary-foreground: oklch(0.17 0.05 259);
-
   --secondary: oklch(0.29 0.055 259);
   --secondary-foreground: oklch(0.95 0.01 250);
-
   --muted: oklch(0.27 0.05 259);
   --muted-foreground: oklch(0.74 0.035 252);
-
   --accent: oklch(0.33 0.07 257);
   --accent-foreground: oklch(0.96 0.01 250);
-
   --surface: oklch(0.225 0.05 259);
   --surface-foreground: oklch(0.95 0.01 250);
-
   --destructive: oklch(0.64 0.17 25);
   --destructive-foreground: oklch(0.16 0.04 259);
   --success: oklch(0.7 0.11 200);
   --success-foreground: oklch(0.16 0.04 259);
-
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.68 0.155 253);
 }
 
 @layer base {
-  * {
-    border-color: var(--color-border);
-  }
-
-  html {
-    scroll-behavior: smooth;
-  }
-
+  * { border-color: var(--color-border); }
+  html { scroll-behavior: smooth; }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
-
   :focus-visible {
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;
@@ -145,152 +121,85 @@
 }
 
 /* ---------- Dami robot motion states ---------- */
-
 @keyframes dami-float {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-0.4deg);
-  }
-  50% {
-    transform: translateY(-10px) rotate(0.6deg);
-  }
+  0%, 100% { transform: translateY(0) rotate(-0.4deg); }
+  50% { transform: translateY(-10px) rotate(0.6deg); }
 }
-
 @keyframes dami-wave {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-2.5deg);
-  }
-  25% {
-    transform: translateY(-14px) rotate(4deg);
-  }
-  60% {
-    transform: translateY(-6px) rotate(-4deg);
-  }
+  0%, 100% { transform: translateY(0) rotate(-2.5deg); }
+  25% { transform: translateY(-14px) rotate(4deg); }
+  60% { transform: translateY(-6px) rotate(-4deg); }
 }
-
 @keyframes dami-listen {
-  0%,
-  100% {
-    transform: translateY(-2px) scale(1);
-  }
-  50% {
-    transform: translateY(-8px) scale(1.02);
-  }
+  0%, 100% { transform: translateY(-2px) scale(1); }
+  50% { transform: translateY(-8px) scale(1.02); }
 }
-
 @keyframes dami-think {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-1.6deg);
-  }
-  50% {
-    transform: translateY(-5px) rotate(1.6deg);
-  }
+  0%, 100% { transform: translateY(0) rotate(-1.6deg); }
+  50% { transform: translateY(-5px) rotate(1.6deg); }
 }
-
 @keyframes dami-speak {
-  0%,
-  100% {
-    transform: translateY(-3px) scale(1);
-  }
-  35% {
-    transform: translateY(-9px) scale(1.015);
-  }
-  70% {
-    transform: translateY(-4px) scale(0.995);
-  }
+  0%, 100% { transform: translateY(-3px) scale(1); }
+  35% { transform: translateY(-9px) scale(1.015); }
+  70% { transform: translateY(-4px) scale(0.995); }
 }
-
 @keyframes dami-success {
-  0% {
-    transform: translateY(0) scale(1);
-  }
-  40% {
-    transform: translateY(-18px) scale(1.03);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-  }
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-18px) scale(1.03); }
+  100% { transform: translateY(0) scale(1); }
 }
-
 @keyframes dami-error {
-  0%,
-  100% {
-    transform: translateY(2px) rotate(0deg);
-  }
-  30% {
-    transform: translateY(4px) rotate(-2deg);
-  }
-  65% {
-    transform: translateY(4px) rotate(2deg);
-  }
+  0%, 100% { transform: translateY(2px) rotate(0deg); }
+  30% { transform: translateY(4px) rotate(-2deg); }
+  65% { transform: translateY(4px) rotate(2deg); }
 }
-
-@keyframes dami-blink {
-  0%,
-  92%,
-  100% {
-    opacity: 0;
-  }
-  94%,
-  98% {
-    opacity: 1;
-  }
-}
-
 @keyframes dami-halo {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(1.06);
-  }
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.06); }
+}
+@keyframes dami-presence {
+  0%, 100% { opacity: 0.2; transform: scale(0.94); }
+  50% { opacity: 0.55; transform: scale(1.02); }
+}
+@keyframes dami-attention {
+  0%, 82%, 100% { opacity: 0.25; transform: scale(0.7); }
+  88% { opacity: 1; transform: scale(1.15); }
+  94% { opacity: 0.5; transform: scale(0.85); }
+}
+@keyframes dami-engage {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.055); }
+  100% { transform: scale(1); }
 }
 
-@keyframes dami-ripple {
-  0% {
-    opacity: 0.5;
-    transform: scale(0.85);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.5);
-  }
+.dami-interactive {
+  transform-style: preserve-3d;
+  transition: transform 180ms ease-out;
+  will-change: transform;
 }
+.dami-interactive .dami-halo {
+  transition: transform 120ms ease-out, opacity 180ms ease-out;
+}
+.dami-interactive:hover .dami-halo { opacity: 0.75; }
+.dami-presence-ring { animation: dami-presence 3.8s ease-in-out infinite; }
+.dami-attention-dot { animation: dami-attention 4.4s ease-in-out infinite; }
+.dami-engaged .dami-presence-ring { animation: dami-engage 650ms ease-out 1; }
+.dami-engaged .dami-attention-dot { opacity: 1; transform: scale(1.25); }
 
-@utility dami-state-idle {
-  animation: dami-float 6s ease-in-out infinite;
-}
-@utility dami-state-welcome {
-  animation: dami-wave 2.4s ease-in-out 1, dami-float 6s ease-in-out 2.4s infinite;
-}
-@utility dami-state-listening {
-  animation: dami-listen 1.8s ease-in-out infinite;
-}
-@utility dami-state-thinking {
-  animation: dami-think 2.6s ease-in-out infinite;
-}
-@utility dami-state-speaking {
-  animation: dami-speak 1.1s ease-in-out infinite;
-}
-@utility dami-state-success {
-  animation: dami-success 1.1s ease-out 1, dami-float 6s ease-in-out 1.1s infinite;
-}
-@utility dami-state-error {
-  animation: dami-error 0.9s ease-in-out 1, dami-float 7s ease-in-out 0.9s infinite;
-}
+@utility dami-state-idle { animation: dami-float 6s ease-in-out infinite; }
+@utility dami-state-welcome { animation: dami-wave 2.4s ease-in-out 1, dami-float 6s ease-in-out 2.4s infinite; }
+@utility dami-state-listening { animation: dami-listen 1.8s ease-in-out infinite; }
+@utility dami-state-thinking { animation: dami-think 2.6s ease-in-out infinite; }
+@utility dami-state-speaking { animation: dami-speak 1.1s ease-in-out infinite; }
+@utility dami-state-success { animation: dami-success 1.1s ease-out 1, dami-float 6s ease-in-out 1.1s infinite; }
+@utility dami-state-error { animation: dami-error 0.9s ease-in-out 1, dami-float 7s ease-in-out 0.9s infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+  .dami-interactive { transform: none !important; }
 }
