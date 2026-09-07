@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ExternalLink, Loader2, Search, Trash2 } from "lucide-react";
+import { ExternalLink, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AnswerPanel } from "@/components/AnswerPanel";
@@ -35,9 +35,7 @@ export const Route = createFileRoute("/research")({
 function ResearchPage() {
   const [sessions, setSessions] = useState<ResearchSession[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [webResults, setWebResults] = useState<WebSearchResult[]>([]);
-  const [webBusy, setWebBusy] = useState(false);
-  const [webError, setWebError] = useState<string | null>(null);
+  const [supplementalSources, setSupplementalSources] = useState<WebSearchResult[]>([]);
 
   useEffect(() => {
     const load = () => setSessions(storage.listSessions());
@@ -49,22 +47,26 @@ function ResearchPage() {
   const open = sessions.find((session) => session.id === openId) ?? null;
 
   useEffect(() => {
-    setWebResults([]);
-    setWebError(null);
-  }, [openId]);
+    let cancelled = false;
+    setSupplementalSources([]);
 
-  const searchWeb = async () => {
-    if (!open || webBusy) return;
-    setWebBusy(true);
-    setWebError(null);
-    try {
-      setWebResults(await searchOfficialSources(open.question));
-    } catch (error) {
-      setWebError(error instanceof Error ? error.message : "Dami couldn't search official sources.");
-    } finally {
-      setWebBusy(false);
-    }
-  };
+    if (!open) return () => {
+      cancelled = true;
+    };
+
+    void searchOfficialSources(open.question)
+      .then((results) => {
+        if (!cancelled) setSupplementalSources(results);
+      })
+      .catch(() => {
+        // Supplemental discovery should never interrupt the user's research flow.
+        // The grounded answer remains the source of truth if enrichment is unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   return (
     <AppShell>
@@ -116,29 +118,16 @@ function ResearchPage() {
               <>
                 <AnswerPanel question={open.question} answer={open.answer} session={open} />
 
-                <section className="rounded-xl border border-border/70 p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                {supplementalSources.length > 0 && (
+                  <section className="rounded-xl border border-border/70 p-5">
                     <div>
-                      <h2 className="font-semibold">Search official sources online</h2>
+                      <h2 className="font-semibold">Related authorities</h2>
                       <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                        Dami can look for additional material on approved Ghanaian legal and public-service websites. These results are shown separately and do not silently change the saved answer.
+                        Additional official material that may be useful alongside Dami's saved answer.
                       </p>
                     </div>
-                    <Button variant="outline" disabled={webBusy} onClick={() => void searchWeb()}>
-                      {webBusy ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Search className="mr-2 h-4 w-4" />
-                      )}
-                      {webBusy ? "Searching…" : "Search official web"}
-                    </Button>
-                  </div>
-
-                  {webError && <p className="mt-4 text-sm text-destructive">{webError}</p>}
-
-                  {webResults.length > 0 && (
                     <div className="mt-5 space-y-3">
-                      {webResults.map((result) => (
+                      {supplementalSources.map((result) => (
                         <a
                           key={result.url}
                           href={result.url}
@@ -160,8 +149,8 @@ function ResearchPage() {
                         </a>
                       ))}
                     </div>
-                  )}
-                </section>
+                  </section>
+                )}
               </>
             ) : (
               <p className="rounded-xl border border-dashed border-border/70 p-10 text-center text-sm text-muted-foreground">
