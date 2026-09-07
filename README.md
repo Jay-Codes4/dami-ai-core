@@ -25,12 +25,18 @@ npm run dev
 
 The web app uses TanStack Start. Server-only credentials must never use a `VITE_` prefix.
 
-Required server environment variables:
+Recommended server environment variables:
 
 ```text
 INTRON_API_KEY=...
-LOVABLE_API_KEY=...
+OPENAI_API_KEY=...
+DAMI_REASONING_MODEL=gpt-5.6-terra
+DAMI_LIVE_WEB=true
 ```
+
+`OPENAI_API_KEY` powers Dami's direct Responses API reasoning and live web-search path. This is the preferred runtime now that development is no longer dependent on Lovable credits.
+
+`LOVABLE_API_KEY` is optional and retained only as a compatibility fallback for the local verified-corpus path.
 
 Optional endpoint overrides:
 
@@ -44,9 +50,16 @@ SAHARA_TTS_GENERATE_URL=https://infer.voice.intron.io/tts/v1/generate
 The repository includes `vercel.json` and switches the Lovable/TanStack Nitro build to the Vercel preset when the `VERCEL` environment variable is present.
 
 1. Import this GitHub repository into Vercel.
-2. Add `INTRON_API_KEY` and `LOVABLE_API_KEY` under Project Settings → Environment Variables.
-3. Do not expose either secret with a `VITE_` prefix.
-4. Deploy. TanStack Start server functions and API routes run as server-side Vercel functions.
+2. Add `INTRON_API_KEY` and `OPENAI_API_KEY` under Project Settings → Environment Variables.
+3. Optionally add `DAMI_REASONING_MODEL=gpt-5.6-terra` and `DAMI_LIVE_WEB=true`.
+4. Do not expose any server secret with a `VITE_` prefix.
+5. Deploy. TanStack Start server functions and API routes run as server-side Vercel functions.
+
+## Live legal research
+
+When `OPENAI_API_KEY` is configured, Dami uses the OpenAI Responses API with live web search. The agent is instructed to prioritize primary legal sources such as courts, legislation portals, gazettes, regulators and government agencies. Web citations shown to the user are taken from actual URL citations returned by the research response rather than invented URLs.
+
+The local verified corpus remains available as a fallback and as a controlled benchmark path. It should continue expanding across African jurisdictions.
 
 ## Desktop companion
 
