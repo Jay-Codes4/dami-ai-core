@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Mic, Send, Square, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowDownToLine, ArrowUpToLine, Loader2, Mic, Send, Square, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AnswerPanel } from "@/components/AnswerPanel";
 import { AppShell } from "@/components/AppShell";
@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useVoiceSession } from "@/hooks/useVoiceSession";
+import { getDesktopBridge, type DesktopDock } from "@/lib/desktop";
 import { DAMI_LANGUAGES, getDamiLanguage, type DamiLanguageCode } from "@/lib/languages";
 import { storage } from "@/lib/storage";
 
@@ -37,10 +38,17 @@ function AskPage() {
   const voice = useVoiceSession();
   const [typed, setTyped] = useState("");
   const [languageCode, setLanguageCode] = useState<DamiLanguageCode>(() => storage.getSettings().speechLanguage);
+  const [desktopDock, setDesktopDock] = useState<DesktopDock | null>(null);
 
   const listening = voice.stage === "listening";
   const busy = voice.isBusy;
   const selectedLanguage = useMemo(() => getDamiLanguage(languageCode), [languageCode]);
+
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    if (!bridge) return;
+    void bridge.getDock().then(setDesktopDock).catch(() => setDesktopDock("top"));
+  }, []);
 
   const changeLanguage = (value: DamiLanguageCode) => {
     const language = getDamiLanguage(value);
@@ -54,6 +62,14 @@ function AskPage() {
     setLanguageCode(value);
   };
 
+  const changeDock = async (dock: DesktopDock) => {
+    const bridge = getDesktopBridge();
+    if (!bridge) return;
+    const next = await bridge.setDock(dock);
+    setDesktopDock(next);
+    storage.setSettings({ ...storage.getSettings(), desktopDock: next });
+  };
+
   return (
     <AppShell>
       <div className="grid gap-10 lg:grid-cols-[320px_1fr]">
@@ -65,6 +81,27 @@ function AskPage() {
               Listening mode: {selectedLanguage.shortLabel}
             </p>
           </div>
+
+          {desktopDock && (
+            <div className="flex items-center gap-2 rounded-lg border border-border/70 p-1" aria-label="Desktop position">
+              <Button
+                type="button"
+                size="sm"
+                variant={desktopDock === "top" ? "secondary" : "ghost"}
+                onClick={() => void changeDock("top")}
+              >
+                <ArrowUpToLine className="mr-1.5 h-4 w-4" /> Top
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={desktopDock === "bottom" ? "secondary" : "ghost"}
+                onClick={() => void changeDock("bottom")}
+              >
+                <ArrowDownToLine className="mr-1.5 h-4 w-4" /> Bottom
+              </Button>
+            </div>
+          )}
 
           <label className="w-full text-left text-xs font-medium text-muted-foreground">
             Voice language
