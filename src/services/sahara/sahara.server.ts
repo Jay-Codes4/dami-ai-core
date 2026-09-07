@@ -1,23 +1,17 @@
 /**
  * Intron Sahara integration — SERVER ONLY.
  *
- * The Sahara credential (INTRON_API_KEY) never leaves the server. The browser
- * talks to `/api/sahara/stt` and `/api/sahara/tts`, which own the credential
- * and the WebSocket sessions documented at:
- *   STT: wss://infer.voice.intron.io/stt/v1/stream
- *   TTS: wss://infer.voice.intron.io/tts/v1/stream
- *
- * If the credential is absent, every entry point fails loudly with a clear
- * message. Dami never returns invented transcripts or synthetic audio.
+ * The Sahara credential never leaves the server. For the deadline build we use
+ * Sahara's synchronous file STT and TTS generate endpoints. This avoids
+ * exposing credentials in browser WebSockets and runs cleanly in Vercel's
+ * Node/server-function environment. The client can still present a streaming-
+ * style voice UX while the server owns the authenticated request.
  */
 
-export const SAHARA_STT_URL =
-  process.env["SAHARA_STT_URL"] ?? "wss://infer.voice.intron.io/stt/v1/stream";
-export const SAHARA_TTS_URL =
-  process.env["SAHARA_TTS_URL"] ?? "wss://infer.voice.intron.io/tts/v1/stream";
-
-/** Documented Sahara session limit. */
-export const SAHARA_MAX_SESSION_SECONDS = 300;
+export const SAHARA_STT_SYNC_URL =
+  process.env["SAHARA_STT_SYNC_URL"] ?? "https://infer.voice.intron.io/file/v1/upload/sync";
+export const SAHARA_TTS_GENERATE_URL =
+  process.env["SAHARA_TTS_GENERATE_URL"] ?? "https://infer.voice.intron.io/tts/v1/generate";
 
 export class SaharaNotConfiguredError extends Error {
   constructor() {
@@ -45,43 +39,8 @@ export function isSaharaConfigured(): boolean {
   return Boolean(process.env["INTRON_API_KEY"]);
 }
 
-type WorkerSocketResponse = Response & { webSocket?: WebSocket };
-
-/**
- * Opens an authenticated WebSocket to Sahara from the server runtime.
- * Uses the Upgrade-over-fetch handshake supported by the edge runtime, which
- * is the only way to attach an Authorization header to a WS connection.
- */
-export async function openSaharaSocket(url: string): Promise<WebSocket> {
-  const key = getSaharaKey();
-  const response = (await fetch(url.replace(/^ws/, "http"), {
-    headers: {
-      Upgrade: "websocket",
-      Authorization: `Bearer ${key}`,
-    },
-  })) as WorkerSocketResponse;
-
-  const socket = response.webSocket;
-  if (!socket) {
-    throw new SaharaRequestError(
-      `Sahara refused the connection (status ${response.status}). Check the API key and endpoint.`,
-    );
-  }
-  socket.accept();
-  return socket;
-}
-
-function parse(data: unknown): Record<string, unknown> | null {
-  if (typeof data !== "string") return null;
-  try {
-    return JSON.parse(data) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
 export interface SttRequest {
-  /** Base64-encoded 16 kHz mono PCM16 audio. */
+  /** Base64-encoded mono PCM16 audio. */
   audioBase64: string;
   sampleRate: number;
   language: string;
@@ -94,79 +53,82 @@ export interface SttResult {
   durationMs: number;
 }
 
-/** Streams one recording to Sahara STT and resolves with the committed transcript. */
+function decodeBase64(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function pcm16ToWav(pcm: Uint8Array, sampleRate: number): Uint8Array {
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+  const write = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+
+  write(0, "RIFF");
+  view.setUint32(4, 36 + pcm.byteLength, true);
+  write(8, "WAVE");
+  write(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, pcm.byteLength, true);
+
+  const wav = new Uint8Array(44 + pcm.byteLength);
+  wav.set(new Uint8Array(header), 0);
+  wav.set(pcm, 44);
+  return wav;
+}
+
+/** Transcribe one browser recording with Sahara's documented synchronous STT endpoint. */
 export async function transcribe(request: SttRequest): Promise<SttResult> {
   const started = Date.now();
-  const socket = await openSaharaSocket(SAHARA_STT_URL);
+  const key = getSaharaKey();
+  const pcm = decodeBase64(request.audioBase64);
+  const wav = pcm16ToWav(pcm, request.sampleRate);
 
-  return await new Promise<SttResult>((resolve, reject) => {
-    let requestId: string | null = null;
-    let finalText = "";
-    let lastPartial = "";
+  const form = new FormData();
+  form.set("audio_file_name", `dami-${Date.now()}.wav`);
+  form.set("audio_file_blob", new Blob([wav], { type: "audio/wav" }), `dami-${Date.now()}.wav`);
+  form.set("use_category", "file_category_legal");
+  form.set("use_language_asr_input", request.language || "en");
+  form.set("use_disable_llm_corrections", "FALSE");
 
-    const timeout = setTimeout(() => {
-      try {
-        socket.close();
-      } catch {
-        /* already closed */
-      }
-      reject(new SaharaRequestError("Sahara took too long to return a transcript."));
-    }, SAHARA_MAX_SESSION_SECONDS * 1000);
-
-    const finish = (text: string) => {
-      clearTimeout(timeout);
-      try {
-        socket.close();
-      } catch {
-        /* already closed */
-      }
-      resolve({ text: text.trim(), requestId, durationMs: Date.now() - started });
-    };
-
-    socket.addEventListener("message", (event: MessageEvent) => {
-      const payload = parse(event.data);
-      if (!payload) return;
-      if (typeof payload["request_id"] === "string") requestId = payload["request_id"];
-
-      const type = String(payload["type"] ?? payload["event"] ?? "");
-      const text = String(payload["text"] ?? payload["transcript"] ?? "");
-
-      if (type.includes("error")) {
-        clearTimeout(timeout);
-        reject(new SaharaRequestError(String(payload["message"] ?? "Sahara returned an error.")));
-        return;
-      }
-      if (type.includes("final") || type.includes("commit") || payload["is_final"] === true) {
-        finalText = text || lastPartial;
-        finish(finalText);
-        return;
-      }
-      if (text) lastPartial = text;
-    });
-
-    socket.addEventListener("close", () => {
-      clearTimeout(timeout);
-      if (finalText || lastPartial) finish(finalText || lastPartial);
-      else reject(new SaharaRequestError("Sahara closed the session without a transcript."));
-    });
-
-    socket.addEventListener("error", () => {
-      clearTimeout(timeout);
-      reject(new SaharaRequestError("The connection to Sahara failed."));
-    });
-
-    socket.send(
-      JSON.stringify({
-        type: "start",
-        encoding: "pcm16",
-        sample_rate: request.sampleRate,
-        language: request.language,
-        code_switching: request.codeSwitching,
-      }),
-    );
-    socket.send(JSON.stringify({ type: "audio", audio: request.audioBase64 }));
-    socket.send(JSON.stringify({ type: "COMMIT" }));
+  const response = await fetch(SAHARA_STT_SYNC_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}` },
+    body: form,
   });
+
+  const payload = (await response.json().catch(() => null)) as
+    | {
+        data?: {
+          file_id?: string;
+          audio_transcript?: string;
+          transcript?: string;
+        };
+        message?: string;
+      }
+    | null;
+
+  if (!response.ok) {
+    const message = payload?.message ?? "Sahara could not transcribe that recording.";
+    throw new SaharaRequestError(message);
+  }
+
+  const text = payload?.data?.audio_transcript ?? payload?.data?.transcript ?? "";
+  return {
+    text: text.trim(),
+    requestId: payload?.data?.file_id ?? null,
+    durationMs: Date.now() - started,
+  };
 }
 
 export interface TtsRequest {
@@ -176,83 +138,30 @@ export interface TtsRequest {
   language: string;
 }
 
-/** Streams answer text to Sahara TTS and resolves with the complete audio. */
+/** Generate natural African-accented speech with Sahara's synchronous TTS endpoint. */
 export async function synthesize(request: TtsRequest): Promise<{ audio: Uint8Array; mime: string }> {
-  const socket = await openSaharaSocket(SAHARA_TTS_URL);
-
-  return await new Promise((resolve, reject) => {
-    const chunks: Uint8Array[] = [];
-    let mime = "audio/mpeg";
-
-    const timeout = setTimeout(() => {
-      try {
-        socket.close();
-      } catch {
-        /* already closed */
-      }
-      reject(new SaharaRequestError("Sahara took too long to return audio."));
-    }, 120_000);
-
-    const finish = () => {
-      clearTimeout(timeout);
-      try {
-        socket.close();
-      } catch {
-        /* already closed */
-      }
-      const total = chunks.reduce((n, c) => n + c.byteLength, 0);
-      if (total === 0) {
-        reject(new SaharaRequestError("Sahara returned no audio for this answer."));
-        return;
-      }
-      const merged = new Uint8Array(total);
-      let offset = 0;
-      for (const chunk of chunks) {
-        merged.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      resolve({ audio: merged, mime });
-    };
-
-    socket.addEventListener("message", (event: MessageEvent) => {
-      if (event.data instanceof ArrayBuffer) {
-        chunks.push(new Uint8Array(event.data));
-        return;
-      }
-      const payload = parse(event.data);
-      if (!payload) return;
-      if (typeof payload["mime"] === "string") mime = payload["mime"];
-      const type = String(payload["type"] ?? payload["event"] ?? "");
-      if (type.includes("error")) {
-        clearTimeout(timeout);
-        reject(new SaharaRequestError(String(payload["message"] ?? "Sahara returned an error.")));
-        return;
-      }
-      if (typeof payload["audio"] === "string") {
-        const binary = atob(payload["audio"]);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-        chunks.push(bytes);
-      }
-      if (type.includes("done") || type.includes("complete") || type.includes("final")) finish();
-    });
-
-    socket.addEventListener("close", finish);
-    socket.addEventListener("error", () => {
-      clearTimeout(timeout);
-      reject(new SaharaRequestError("The connection to Sahara failed."));
-    });
-
-    socket.send(
-      JSON.stringify({
-        type: "start",
-        voice_accent: request.accent,
-        voice_gender: request.gender,
-        language: request.language,
-        output_format: "mp3",
-      }),
-    );
-    socket.send(JSON.stringify({ type: "text", text: request.text }));
-    socket.send(JSON.stringify({ type: "COMMIT" }));
+  const key = getSaharaKey();
+  const response = await fetch(SAHARA_TTS_GENERATE_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text: request.text.slice(0, 4096),
+      voice_accent: request.accent,
+      voice_gender: request.gender,
+      voice_language: request.language || "en",
+      output_audio_format: "wav",
+    }),
   });
+
+  if (!response.ok) {
+    const detail = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new SaharaRequestError(detail?.message ?? "Sahara could not generate speech for that answer.");
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength === 0) throw new SaharaRequestError("Sahara returned no audio for this answer.");
+  return { audio: bytes, mime: response.headers.get("content-type") ?? "audio/wav" };
 }
