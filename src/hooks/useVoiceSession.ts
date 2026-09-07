@@ -14,8 +14,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { askDami } from "@/lib/dami.functions";
 import { getDamiLanguage } from "@/lib/languages";
 import { newId, storage } from "@/lib/storage";
-import { MicrophoneError, startRecording, transcribeSamples, type Recorder } from "@/services/sahara/stt.client";
-import { speak, type SpeechHandle } from "@/services/sahara/tts.client";
+import {
+  speak,
+  startRecording,
+  transcribeSamples,
+  type Recorder,
+  type SpeechHandle,
+} from "@/services/sahara/browser";
 import type { DamiState, ResearchAnswer, ResearchSession, VoiceStage } from "@/lib/types";
 
 const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
@@ -65,7 +70,10 @@ export function useVoiceSession() {
   }, []);
 
   useEffect(() => {
-    const welcomeTimer = setTimeout(() => setStage((current) => (current === "welcome" ? "idle" : current)), 2200);
+    const welcomeTimer = setTimeout(
+      () => setStage((current) => (current === "welcome" ? "idle" : current)),
+      2200,
+    );
     return () => clearTimeout(welcomeTimer);
   }, []);
 
@@ -188,7 +196,7 @@ export function useVoiceSession() {
       recorderRef.current = null;
       stopLevelMeter();
       setError(
-        err instanceof MicrophoneError
+        err instanceof Error && err.name === "MicrophoneError"
           ? err.message
           : "I couldn't start listening. You can type your question instead.",
       );
