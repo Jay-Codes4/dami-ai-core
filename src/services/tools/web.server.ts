@@ -38,14 +38,11 @@ export function isApprovedLegalHost(url: string): boolean {
 
 export async function webSearch(query: string, count = 8): Promise<WebSearchResult[]> {
   const trimmed = query.trim();
-  if (!trimmed) throw new WebToolError("Enter a search query first.", 400);
+  if (!trimmed) throw new WebToolError("Give Dami a research query first.", 400);
 
   const key = process.env["BRAVE_SEARCH_API_KEY"];
   if (!key) {
-    throw new WebToolError(
-      "Internet research is not configured yet. Add BRAVE_SEARCH_API_KEY on the server.",
-      503,
-    );
+    throw new WebToolError("Dami's extended research sources are not configured yet.", 503);
   }
 
   const url = new URL(BRAVE_SEARCH_URL);
@@ -61,7 +58,7 @@ export async function webSearch(query: string, count = 8): Promise<WebSearchResu
   });
 
   if (!response.ok) {
-    throw new WebToolError(`Web search failed with status ${response.status}.`);
+    throw new WebToolError("Dami couldn't complete source discovery just now.");
   }
 
   const payload = (await response.json()) as {
@@ -85,7 +82,7 @@ export async function searchOfficialLegalWeb(query: string): Promise<WebSearchRe
 export async function webRead(url: string): Promise<string> {
   if (!isApprovedLegalHost(url)) {
     throw new WebToolError(
-      "Dami can only read approved Ghanaian legal/public-service sources in this research mode.",
+      "Dami can only use approved Ghanaian legal and public-service sources in this research mode.",
       403,
     );
   }
@@ -95,16 +92,16 @@ export async function webRead(url: string): Promise<string> {
     headers: { "User-Agent": "DamiAI/1.0 legal-research-assistant" },
   });
 
-  if (!response.ok) throw new WebToolError(`Could not read that source (${response.status}).`);
+  if (!response.ok) throw new WebToolError("Dami couldn't read that authority just now.");
 
   const finalUrl = response.url || url;
   if (!isApprovedLegalHost(finalUrl)) {
-    throw new WebToolError("The source redirected outside Dami's approved legal domains.", 403);
+    throw new WebToolError("That authority points outside Dami's approved legal sources.", 403);
   }
 
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("text/html") && !contentType.includes("text/plain")) {
-    throw new WebToolError("This source is not readable as web text yet.", 415);
+    throw new WebToolError("That authority is not available as readable text yet.", 415);
   }
 
   const text = await response.text();
