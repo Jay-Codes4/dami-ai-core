@@ -38,12 +38,29 @@ function AskPage() {
   const listening = voice.stage === "listening";
   const busy = voice.isBusy;
 
+  const activateDami = () => {
+    if (listening) {
+      void voice.stopListening();
+      return;
+    }
+    if (!busy) void voice.startListening();
+  };
+
   return (
     <AppShell>
       <div className="grid gap-10 lg:grid-cols-[320px_1fr]">
         <aside className="flex flex-col items-center gap-5 text-center">
-          <DamiAvatar state={voice.robotState} size={200} level={voice.level} />
+          <DamiAvatar
+            state={voice.robotState}
+            size={200}
+            level={voice.level}
+            onActivate={activateDami}
+            activationLabel={listening ? "Stop listening" : "Talk with Dami"}
+          />
           <p className="text-sm font-medium text-muted-foreground">{voice.statusText}</p>
+          <p className="-mt-3 text-xs text-muted-foreground">
+            {listening ? "Tap Dami when you're done speaking" : "Tap Dami to speak"}
+          </p>
 
           <div className="flex flex-wrap justify-center gap-2">
             {listening ? (
@@ -126,8 +143,8 @@ function AskPage() {
               <div className="rounded-xl border border-dashed border-border/70 p-10 text-center">
                 <h1 className="text-2xl font-semibold tracking-tight">Ask Dami</h1>
                 <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
-                  Tap “Talk with Dami”, ask your question out loud, then tap “Done speaking”. Your
-                  answer will appear here with every authority Dami relied on.
+                  Tap Dami or “Talk with Dami”, ask your question out loud, then tap Dami again when
+                  you're finished. Your answer will appear here with every authority Dami relied on.
                 </p>
               </div>
             )
