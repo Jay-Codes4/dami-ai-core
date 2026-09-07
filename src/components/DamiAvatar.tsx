@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import robot from "@/assets/dami-robot.png";
+import "@/dami-avatar.css";
 import { cn } from "@/lib/utils";
 import type { DamiState } from "@/lib/types";
 
