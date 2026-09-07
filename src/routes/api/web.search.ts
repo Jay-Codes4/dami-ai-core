@@ -30,8 +30,8 @@ export const Route = createFileRoute("/api/web/search")({
           if (error instanceof WebToolError) {
             return Response.json({ error: error.message }, { status: error.status });
           }
-          console.error("Dami web search failed", error);
-          return Response.json({ error: "Dami couldn't search the web just now." }, { status: 502 });
+          console.error("Dami source discovery failed", error);
+          return Response.json({ error: "Dami couldn't complete source discovery just now." }, { status: 502 });
         }
       },
     },
