@@ -27,6 +27,8 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
     <div
       className={cn("relative grid place-items-center", className)}
       style={{ width: size, height: size }}
+      data-dami-state={state}
+      aria-live="polite"
     >
       <span
         aria-hidden
@@ -35,7 +37,7 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
       />
       <img
         src={robot}
-        alt="Dami, the voice-first Ghanaian legal research assistant"
+        alt={`Dami, the African legal AI agent — ${state}`}
         width={size}
         height={size}
         className={cn("relative z-10 h-full w-full object-contain", STATE_CLASS[state])}
