@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AskRouteImport } from './routes/ask'
 import { Route as ApiSaharaSttRouteImport } from './routes/api/sahara.stt'
 import { Route as ApiSaharaTtsRouteImport } from './routes/api/sahara.tts'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AskRoute = AskRouteImport.update({
+  id: '/ask',
+  path: '/ask',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSaharaSttRoute = ApiSaharaSttRouteImport.update({
@@ -31,30 +37,34 @@ const ApiSaharaTtsRoute = ApiSaharaTtsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/ask': typeof AskRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/sahara/stt' | '/api/sahara/tts'
+  fullPaths: '/' | '/ask' | '/api/sahara/stt' | '/api/sahara/tts'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/sahara/stt' | '/api/sahara/tts'
-  id: '__root__' | '/' | '/api/sahara/stt' | '/api/sahara/tts'
+  to: '/' | '/ask' | '/api/sahara/stt' | '/api/sahara/tts'
+  id: '__root__' | '/' | '/ask' | '/api/sahara/stt' | '/api/sahara/tts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AskRoute: typeof AskRoute
   ApiSaharaSttRoute: typeof ApiSaharaSttRoute
   ApiSaharaTtsRoute: typeof ApiSaharaTtsRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ask': {
+      id: '/ask'
+      path: '/ask'
+      fullPath: '/ask'
+      preLoaderRoute: typeof AskRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/sahara/stt': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AskRoute: AskRoute,
   ApiSaharaSttRoute: ApiSaharaSttRoute,
   ApiSaharaTtsRoute: ApiSaharaTtsRoute,
 }
