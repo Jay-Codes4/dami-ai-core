@@ -17,7 +17,7 @@ export interface DamiLanguage {
 export const DAMI_LANGUAGES: DamiLanguage[] = [
   {
     code: "en",
-    label: "English — African accent",
+    label: "English",
     shortLabel: "English",
     codeSwitched: false,
     ttsLanguage: "en",
