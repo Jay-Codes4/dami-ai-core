@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, Mic, Send, Square, X } from "lucide-react";
 import { useState } from "react";
 
-import { AnswerPanel } from "@/components/AnswerPanel";
 import { AppShell } from "@/components/AppShell";
 import { DamiAvatar } from "@/components/DamiAvatar";
+import { VoiceAnswerPanel } from "@/components/VoiceAnswerPanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,12 +17,12 @@ export const Route = createFileRoute("/ask")({
       {
         name: "description",
         content:
-          "Speak or type your legal question and Dami answers from verified Ghanaian legislation, with linked citations you can verify.",
+          "Speak or type your legal question and Dami responds by voice from verified Ghanaian legislation, with linked citations you can verify.",
       },
       { property: "og:title", content: "Ask Dami — Voice legal research for Ghana" },
       {
         property: "og:description",
-        content: "Speak your legal question; Dami answers from verified Ghanaian authorities.",
+        content: "Speak your legal question; Dami researches verified Ghanaian authorities and responds by voice.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -43,7 +43,7 @@ function AskPage() {
       void voice.stopListening();
       return;
     }
-    if (!busy) void voice.startListening();
+    if (!busy && voice.stage !== "speaking") void voice.startListening();
   };
 
   return (
@@ -75,7 +75,7 @@ function AskPage() {
             ) : (
               <Button
                 size="lg"
-                disabled={busy}
+                disabled={busy || voice.stage === "speaking"}
                 onClick={() => void voice.startListening()}
                 className="shadow-[var(--shadow-lift)]"
               >
@@ -84,7 +84,7 @@ function AskPage() {
                 ) : (
                   <Mic className="mr-2 h-5 w-5" />
                 )}
-                {busy ? "Working…" : "Talk with Dami"}
+                {busy ? "Working…" : voice.stage === "speaking" ? "Dami is speaking" : "Talk with Dami"}
               </Button>
             )}
           </div>
@@ -100,7 +100,7 @@ function AskPage() {
             }}
           >
             <label htmlFor="typed-question" className="text-xs text-muted-foreground">
-              Prefer to type? Ask here instead.
+              Prefer to type? Dami will still answer you by voice.
             </label>
             <Textarea
               id="typed-question"
@@ -109,7 +109,7 @@ function AskPage() {
               placeholder="e.g. What are my rights if the police arrest me in Ghana?"
               rows={4}
             />
-            <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
+            <Button type="submit" variant="secondary" className="w-full" disabled={busy || voice.stage === "speaking"}>
               <Send className="mr-2 h-4 w-4" /> Ask Dami
             </Button>
           </form>
@@ -128,14 +128,13 @@ function AskPage() {
             </Alert>
           )}
 
-          {voice.answer && voice.question ? (
-            <AnswerPanel
-              question={voice.question}
+          {voice.answer ? (
+            <VoiceAnswerPanel
               answer={voice.answer}
               session={voice.session}
               speaking={voice.stage === "speaking"}
-              onReadAloud={() => void voice.readAloud(voice.answer!.answer)}
-              onStopSpeaking={voice.stopSpeaking}
+              onReplay={() => void voice.readAloud(voice.answer!.answer)}
+              onStop={voice.stopSpeaking}
             />
           ) : (
             !busy &&
@@ -144,7 +143,7 @@ function AskPage() {
                 <h1 className="text-2xl font-semibold tracking-tight">Ask Dami</h1>
                 <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
                   Tap Dami or “Talk with Dami”, ask your question out loud, then tap Dami again when
-                  you're finished. Your answer will appear here with every authority Dami relied on.
+                  you're finished. Dami will research it and answer you by voice.
                 </p>
               </div>
             )
