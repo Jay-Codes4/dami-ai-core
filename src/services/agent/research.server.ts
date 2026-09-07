@@ -1,10 +1,10 @@
 /**
  * Dami's legal reasoning agent — SERVER ONLY.
  *
- * Dami prefers live, source-backed web research when OPENAI_API_KEY is
- * configured. The existing verified local corpus remains a safe fallback and
- * benchmark path. This removes runtime dependence on Lovable credits while
- * preserving the existing Lovable gateway as an optional compatibility path.
+ * Dami prefers live, source-backed web research. Gemini is the primary path
+ * when GEMINI_API_KEY is configured, with OpenAI retained as an optional
+ * fallback. The verified local corpus remains a safe fallback and benchmark
+ * path.
  */
 
 import { buildCitations } from "@/services/citations/citations";
@@ -13,6 +13,7 @@ import type { Citation, ResearchAnswer, RetrievedPassage } from "@/lib/types";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const OPENAI_MODEL = process.env["DAMI_REASONING_MODEL"] ?? "gpt-5.6-terra";
+const GEMINI_MODEL = process.env["DAMI_GEMINI_MODEL"] ?? "gemini-3-flash-preview";
 const LOVABLE_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/responses";
 const LOVABLE_MODEL = "openai/gpt-6-astra";
 
@@ -157,6 +158,108 @@ function extractWebResponse(payload: unknown): { text: string; citations: Citati
   return { text: text.trim(), citations };
 }
 
+interface GeminiGroundingChunk {
+  web?: {
+    uri?: string;
+    title?: string;
+  };
+}
+
+function extractGeminiResponse(payload: unknown): { text: string; citations: Citation[] } {
+  const body = payload as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+      groundingMetadata?: { groundingChunks?: GeminiGroundingChunk[] };
+    }>;
+  };
+
+  const candidate = body.candidates?.[0];
+  const text = (candidate?.content?.parts ?? [])
+    .map((part) => part.text ?? "")
+    .join("")
+    .trim();
+
+  const seen = new Set<string>();
+  const citations: Citation[] = [];
+  for (const chunk of candidate?.groundingMetadata?.groundingChunks ?? []) {
+    const uri = chunk.web?.uri;
+    if (!uri || seen.has(uri)) continue;
+    seen.add(uri);
+
+    let host = "Web source";
+    try {
+      host = new URL(uri).hostname.replace(/^www\./, "");
+    } catch {
+      /* keep generic host label */
+    }
+
+    citations.push({
+      sourceId: `web_${citations.length + 1}`,
+      title: chunk.web?.title || host,
+      authority: host,
+      locator: "Google Search grounded authority",
+      date: null,
+      url: uri,
+      officialSource: host,
+    });
+  }
+
+  return { text, citations };
+}
+
+async function researchFromGemini(question: string, apiKey: string): Promise<ResearchAnswer> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [
+            {
+              text: `${IDENTITY_PROMPT}\n\nUse Google Search grounding for this request. Search broadly enough to identify the jurisdiction and strongest relevant authorities, but prioritize primary legal sources. Every material legal proposition should be grounded in sources. If the jurisdiction is genuinely unclear and a safe answer requires it, ask one concise jurisdiction question instead of guessing.`,
+            },
+          ],
+        },
+        contents: [{ role: "user", parts: [{ text: question }] }],
+        tools: [{ googleSearch: {} }],
+        generationConfig: {
+          temperature: 0.2,
+        },
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error("Gemini web research error", response.status, detail);
+    if (response.status === 429) {
+      throw new ResearchError("Dami's free research quota is temporarily busy. Try again shortly.", 429);
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new ResearchError("Dami's Gemini research key isn't authorized correctly yet.", 503);
+    }
+    throw new ResearchError("Dami couldn't complete live legal research just now.", 502);
+  }
+
+  const { text, citations } = extractGeminiResponse(await response.json());
+  if (!text) throw new ResearchError("Dami couldn't put that live research together. Please try again.", 502);
+
+  return {
+    answer: text,
+    keyFindings: [],
+    citations,
+    insufficientEvidence: citations.length === 0,
+    limitations:
+      citations.length === 0
+        ? "The live research response did not expose verifiable source citations, so Dami will not treat it as fully grounded."
+        : "Live legal research can change as courts, legislation and official portals update. Verify critical authorities at the linked primary source before filing, advising or relying on them.",
+  };
+}
+
 async function researchFromWeb(question: string, apiKey: string): Promise<ResearchAnswer> {
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
@@ -212,7 +315,7 @@ async function researchFromLocalCorpus(question: string): Promise<ResearchAnswer
   const lovableKey = process.env["LOVABLE_API_KEY"];
   if (!lovableKey) {
     throw new ResearchError(
-      "Dami's reasoning service isn't configured. Add OPENAI_API_KEY for live research or LOVABLE_API_KEY for the legacy local-corpus path.",
+      "Dami's reasoning service isn't configured. Add GEMINI_API_KEY for free live research, OPENAI_API_KEY for OpenAI live research, or LOVABLE_API_KEY for the legacy local-corpus path.",
       503,
     );
   }
@@ -268,8 +371,11 @@ export async function research(question: string): Promise<ResearchAnswer> {
   const trimmed = question.trim();
   if (!trimmed) throw new ResearchError("Ask Dami a question first.", 400);
 
-  const openAiKey = process.env["OPENAI_API_KEY"];
   const liveWebEnabled = process.env["DAMI_LIVE_WEB"] !== "false";
+  const geminiKey = process.env["GEMINI_API_KEY"] ?? process.env["GOOGLE_API_KEY"];
+  if (geminiKey && liveWebEnabled) return researchFromGemini(trimmed, geminiKey);
+
+  const openAiKey = process.env["OPENAI_API_KEY"];
   if (openAiKey && liveWebEnabled) return researchFromWeb(trimmed, openAiKey);
 
   return researchFromLocalCorpus(trimmed);
