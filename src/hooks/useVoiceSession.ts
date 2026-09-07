@@ -3,9 +3,9 @@
  *
  *   idle → listening → transcribing → researching → answered → speaking
  *
- * Every failure path resolves to a friendly, Dami-specific message; raw
- * technical errors are logged, never shown. Nothing is ever faked: if a
- * service is unavailable the session reports it and stops.
+ * Dami is voice-first: once research completes, the response is spoken
+ * automatically. Text remains supporting UI only for status, sources and
+ * accessibility — the primary answer is audio.
  */
 
 import { useServerFn } from "@tanstack/react-start";
@@ -32,9 +32,9 @@ export const STAGE_LABEL: Record<VoiceStage, string> = {
   idle: "Ready when you are.",
   "requesting-permission": "Waiting for microphone permission…",
   listening: "Listening…",
-  transcribing: "Turning your words into text…",
-  researching: "Researching Ghanaian authorities…",
-  answered: "Here's what Dami found.",
+  transcribing: "Understanding your question…",
+  researching: "Working on your answer…",
+  answered: "Response ready.",
   speaking: "Dami is speaking…",
   error: "Something went wrong.",
 };
@@ -94,6 +94,8 @@ export function useVoiceSession() {
   const readAloud = useCallback(async (text: string) => {
     const settings = storage.getSettings();
     try {
+      speechRef.current?.stop();
+      speechRef.current = null;
       setStage("speaking");
       const handle = await speak(text, {
         accent: settings.voiceAccent,
@@ -107,7 +109,7 @@ export function useVoiceSession() {
     } catch (err) {
       speechRef.current = null;
       setStage("answered");
-      setError(err instanceof Error ? err.message : "Dami couldn't read that answer aloud.");
+      setError(err instanceof Error ? err.message : "Dami couldn't play the voice response.");
     }
   }, []);
 
@@ -131,7 +133,6 @@ export function useVoiceSession() {
         if (cancelled.current) return;
 
         setAnswer(result);
-        setStage("answered");
 
         const record: ResearchSession = {
           id: newId("ses"),
@@ -144,9 +145,10 @@ export function useVoiceSession() {
         storage.saveSession(record);
         setSession(record);
 
-        if (storage.getSettings().speakAnswers && !result.insufficientEvidence) {
-          await readAloud(result.answer);
-        }
+        const spokenText = result.insufficientEvidence && result.limitations
+          ? `${result.answer} ${result.limitations}`
+          : result.answer;
+        await readAloud(spokenText);
       } catch (err) {
         if (cancelled.current) return;
         console.error(err);
@@ -210,7 +212,7 @@ export function useVoiceSession() {
       setError(
         err instanceof Error && err.message
           ? err.message
-          : "Dami couldn't turn that recording into text.",
+          : "Dami couldn't understand that recording.",
       );
       setStage("error");
     }
