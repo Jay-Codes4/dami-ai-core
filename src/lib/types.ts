@@ -7,11 +7,14 @@
  * must both satisfy these shapes.
  */
 
+import type { DamiLanguageCode } from "./languages";
+
 export type ISODateString = string;
 
 /** Lifecycle of a single voice interaction. */
 export type VoiceStage =
   | "idle"
+  | "welcome"
   | "requesting-permission"
   | "listening"
   | "transcribing"
@@ -34,7 +37,7 @@ export interface User {
   id: string;
   displayName: string;
   /** Kept deliberately minimal — Dami stores no unnecessary personal data. */
-  locale: "en-GH" | "en";
+  locale: string;
   createdAt: ISODateString;
 }
 
@@ -82,21 +85,15 @@ export type LegalDocumentType =
 export interface LegalSource {
   id: string;
   title: string;
-  /** Issuing authority, e.g. "Parliament of Ghana", "Supreme Court of Ghana". */
   authority: string;
-  jurisdiction: "Ghana";
+  jurisdiction: string;
   docType: LegalDocumentType;
-  /** Year of enactment / decision, when known. */
   year: number | null;
-  /** Citation locator, e.g. "Act 30", "Article 14", "s. 96". */
   locator: string;
-  /** Official or authoritative repository that hosts the full text. */
   officialSource: string;
-  /** Clickable link to that repository. Never fabricate deep links. */
   url: string;
   topics: string[];
   summary: string;
-  /** Optional verbatim passage — only present when ingested from source text. */
   passage?: string;
 }
 
@@ -114,19 +111,14 @@ export interface Citation {
   date: string | null;
   url: string;
   officialSource: string;
-  /** Verbatim passage, present only when the corpus record carries one. */
   passage?: string;
 }
 
 export interface ResearchAnswer {
-  /** Plain-language answer, grounded strictly in the retrieved sources. */
   answer: string;
   keyFindings: string[];
-  /** Authorities the answer actually relies on. */
   citations: Citation[];
-  /** True when the corpus lacks adequate authority for the question. */
   insufficientEvidence: boolean;
-  /** Explanation shown when evidence is insufficient. */
   limitations: string;
 }
 
@@ -153,20 +145,25 @@ export interface SavedDocument {
 
 export interface DamiSettings {
   theme: "light" | "dark" | "system";
-  /** Sahara TTS voice preferences (sent server-side only). */
-  voiceAccent: "ghanaian" | "west-african" | "neutral";
+  /** Sahara input language. Launch set is intentionally small for deadline QA. */
+  speechLanguage: DamiLanguageCode;
+  /** Sahara TTS voice preferences. */
+  voiceAccent: string;
   voiceGender: "female" | "male";
   speakAnswers: boolean;
   maxRecordingSeconds: number;
-  /** Allow Akan-English code-switching hints for STT. */
   codeSwitching: boolean;
+  /** Desktop companion placement once running inside Electron. */
+  desktopDock: "top" | "bottom";
 }
 
 export const DEFAULT_SETTINGS: DamiSettings = {
   theme: "system",
-  voiceAccent: "ghanaian",
+  speechLanguage: "en",
+  voiceAccent: "yoruba",
   voiceGender: "female",
   speakAnswers: true,
   maxRecordingSeconds: 120,
   codeSwitching: true,
+  desktopDock: "top",
 };

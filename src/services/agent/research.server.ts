@@ -1,19 +1,20 @@
 /**
  * Dami's legal reasoning agent — SERVER ONLY.
  *
- * Contract: the model may only reason over passages handed to it by the
- * retrieval layer, and may only reference sources by their corpus id. Titles,
- * locators and URLs are attached afterwards by the citation builder, so a
- * fabricated authority cannot reach the user. When the retrieved evidence is
- * inadequate the model must say so.
+ * Dami prefers live, source-backed web research when OPENAI_API_KEY is
+ * configured. The existing verified local corpus remains a safe fallback and
+ * benchmark path. This removes runtime dependence on Lovable credits while
+ * preserving the existing Lovable gateway as an optional compatibility path.
  */
 
 import { buildCitations } from "@/services/citations/citations";
 import { isInsufficient, retrieve } from "@/services/rag/retrieve";
-import type { ResearchAnswer, RetrievedPassage } from "@/lib/types";
+import type { Citation, ResearchAnswer, RetrievedPassage } from "@/lib/types";
 
-const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/responses";
-const MODEL = "openai/gpt-6-astra";
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const OPENAI_MODEL = process.env["DAMI_REASONING_MODEL"] ?? "gpt-5.6-terra";
+const LOVABLE_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/responses";
+const LOVABLE_MODEL = "openai/gpt-6-astra";
 
 export class ResearchError extends Error {
   constructor(
@@ -25,21 +26,29 @@ export class ResearchError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `You are Dami, a voice-first legal research assistant for Ghana. Your motto is "A Voice for Justice".
+const IDENTITY_PROMPT = `You are Dami, an African legal AI agent. Your motto is "A Voice for Justice".
 
-ABSOLUTE RULES
-1. Reason ONLY from the SOURCES block supplied in the user message. It is your entire evidence base.
-2. Never invent or assert a case name, party name, judge, statute number, section, quotation, date or URL. If it is not in the SOURCES block, you do not know it.
-3. The SOURCES entries are citation-level records (title, authority, locator, topical description). They are NOT the full text of the instrument. Never present their descriptions as quotations, and never claim to have read the full text.
-4. Cite by "sourceIds" only, using the exact ids given. Cite only sources you actually relied on.
-5. If the sources do not adequately answer the question, set insufficientEvidence to true, explain the gap plainly, and point the user to the official repositories listed. Do not guess.
-6. Speak plainly. The answer will be read aloud, so use short sentences, no markdown, no bullet characters, no headings.
-7. Understand Ghanaian-accented English and Akan-English code-switching in the question; always answer in clear English unless the user explicitly asks otherwise.
-8. Always be clear that this is legal information and research assistance, not a substitute for advice from a qualified lawyer.
+You assist lawyers, legal researchers, students, public-service teams and people seeking legal information. You are not a Ghana-only product. Treat jurisdiction as part of every legal problem and never silently assume a country when the answer depends on it.
+
+Be a capable legal research partner, not a search-results page. Understand what the user is trying to accomplish and answer that task directly. Start with the useful answer. Then explain the strongest authority, how it applies, important uncertainty and the next sensible legal research or practice step when relevant.
+
+Never fabricate a case, statute, court, judge, section, quotation, date or URL. Distinguish binding authority from persuasive material. Prefer primary and authoritative sources: legislation portals, constitutions, courts, gazettes, regulators, government agencies and reputable legal-information institutes. Use secondary commentary only to orient the research, never as a substitute for primary authority when primary authority is available.
+
+Do not give a bland list of links. Explain why each relied-on source matters. Do not hide uncertainty behind generic phrases such as "it depends"; say exactly what fact, jurisdiction, procedure or authority the conclusion depends on.
+
+Understand African-accented English and code-switching. Answer in the language the user used when you can do so reliably; otherwise use clear English without pretending fluency.
+
+Dami provides legal information and research assistance. Do not front-load a generic disclaimer; mention professional advice only where the user's situation genuinely calls for it.`;
+
+const LOCAL_SYSTEM_PROMPT = `${IDENTITY_PROMPT}
+
+For this request, reason ONLY from the SOURCES block supplied in the user message. It is your verified evidence base. Source descriptions are not quotations. Cite by sourceIds only, using exact ids supplied. If evidence is inadequate, set insufficientEvidence=true and explain exactly what is missing.
+
+The answer field may be read aloud, so use natural paragraphs and short sentences with no markdown headings or bullet symbols.
 
 Return JSON only, matching the schema exactly.`;
 
-const SCHEMA = {
+const LOCAL_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["answer", "keyFindings", "sourceIds", "insufficientEvidence", "limitations"],
@@ -60,6 +69,7 @@ function renderSources(results: RetrievedPassage[]): string {
         `[${index + 1}] id: ${s.id}`,
         `title: ${s.title}`,
         `authority: ${s.authority}`,
+        `jurisdiction: ${s.jurisdiction}`,
         `type: ${s.docType}`,
         `locator: ${s.locator}`,
         `year: ${s.year ?? "unknown"}`,
@@ -71,7 +81,7 @@ function renderSources(results: RetrievedPassage[]): string {
     .join("\n\n");
 }
 
-interface ModelOutput {
+interface LocalModelOutput {
   answer: string;
   keyFindings: string[];
   sourceIds: string[];
@@ -79,73 +89,143 @@ interface ModelOutput {
   limitations: string;
 }
 
-function extractJson(payload: unknown): ModelOutput {
+function extractJson(payload: unknown): LocalModelOutput {
   const body = payload as {
     output_text?: string;
-    output?: Array<{ content?: Array<{ text?: string; type?: string }> }>;
+    output?: Array<{ content?: Array<{ text?: string }> }>;
   };
-
   let text = body.output_text ?? "";
   if (!text && Array.isArray(body.output)) {
-    for (const item of body.output) {
-      for (const part of item.content ?? []) {
-        if (typeof part.text === "string") text += part.text;
-      }
-    }
+    for (const item of body.output) for (const part of item.content ?? []) if (part.text) text += part.text;
   }
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1) {
-    throw new ResearchError("Dami couldn't put that research together. Please try again.", 502);
-  }
-  return JSON.parse(text.slice(start, end + 1)) as ModelOutput;
+  if (start === -1 || end === -1) throw new ResearchError("Dami couldn't put that research together. Please try again.", 502);
+  return JSON.parse(text.slice(start, end + 1)) as LocalModelOutput;
 }
 
-export async function research(question: string): Promise<ResearchAnswer> {
-  const trimmed = question.trim();
-  if (!trimmed) {
-    throw new ResearchError("Ask Dami a question first.", 400);
+interface UrlAnnotation {
+  type?: string;
+  title?: string;
+  url?: string;
+}
+
+function extractWebResponse(payload: unknown): { text: string; citations: Citation[] } {
+  const body = payload as {
+    output_text?: string;
+    output?: Array<{
+      type?: string;
+      content?: Array<{ type?: string; text?: string; annotations?: UrlAnnotation[] }>;
+    }>;
+  };
+
+  let text = body.output_text ?? "";
+  const annotations: UrlAnnotation[] = [];
+  if (Array.isArray(body.output)) {
+    for (const item of body.output) {
+      for (const part of item.content ?? []) {
+        if (!body.output_text && typeof part.text === "string") text += part.text;
+        for (const annotation of part.annotations ?? []) {
+          if (annotation.type === "url_citation" && annotation.url) annotations.push(annotation);
+        }
+      }
+    }
   }
 
-  const results = retrieve(trimmed);
+  const seen = new Set<string>();
+  const citations: Citation[] = [];
+  for (const annotation of annotations) {
+    if (!annotation.url || seen.has(annotation.url)) continue;
+    seen.add(annotation.url);
+    let host = "Web source";
+    try {
+      host = new URL(annotation.url).hostname.replace(/^www\./, "");
+    } catch {
+      /* keep generic host label */
+    }
+    citations.push({
+      sourceId: `web_${citations.length + 1}`,
+      title: annotation.title || host,
+      authority: host,
+      locator: "Live web authority",
+      date: null,
+      url: annotation.url,
+      officialSource: host,
+    });
+  }
 
+  return { text: text.trim(), citations };
+}
+
+async function researchFromWeb(question: string, apiKey: string): Promise<ResearchAnswer> {
+  const response = await fetch(OPENAI_RESPONSES_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      reasoning: { effort: "medium" },
+      instructions: `${IDENTITY_PROMPT}\n\nUse live web search for this request. Search broadly enough to identify the jurisdiction and strongest relevant authorities, but prioritize primary legal sources. Every material legal proposition in your answer should be supported by a web-cited source. If the jurisdiction is genuinely unclear and a safe answer requires it, ask one concise jurisdiction question instead of guessing.`,
+      tools: [{ type: "web_search", search_context_size: "high" }],
+      include: ["web_search_call.action.sources"],
+      input: question,
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error("OpenAI web research error", response.status, detail);
+    if (response.status === 429) throw new ResearchError("Dami is handling a lot of research right now. Try again shortly.", 429);
+    throw new ResearchError("Dami couldn't complete live legal research just now.", 502);
+  }
+
+  const { text, citations } = extractWebResponse(await response.json());
+  if (!text) throw new ResearchError("Dami couldn't put that live research together. Please try again.", 502);
+
+  return {
+    answer: text,
+    keyFindings: [],
+    citations,
+    insufficientEvidence: citations.length === 0,
+    limitations:
+      citations.length === 0
+        ? "The live research response did not expose verifiable source citations, so Dami will not treat it as fully grounded."
+        : "Live legal research can change as courts, legislation and official portals update. Verify critical authorities at the linked primary source before filing, advising or relying on them.",
+  };
+}
+
+async function researchFromLocalCorpus(question: string): Promise<ResearchAnswer> {
+  const results = retrieve(question);
   if (results.length === 0) {
     return {
       answer:
-        "Dami could not find an authority in its verified Ghanaian corpus that speaks to this question, so it will not attempt an answer.",
+        "I don't have a verified authority in the current local corpus that is strong enough to answer this safely. Tell me the jurisdiction if you haven't already, or enable Dami's live web research so I can look for current primary authorities.",
       keyFindings: [],
       citations: [],
       insufficientEvidence: true,
-      limitations:
-        "Dami's corpus currently covers core Ghanaian constitutional provisions, principal statutes and official public-service portals. Nothing in it matched this question closely enough to ground an answer. Try rephrasing, or consult the Judicial Service of Ghana, GhaLII or the Legal Aid Commission directly.",
+      limitations: "The built-in verified corpus is still being expanded across African jurisdictions.",
     };
   }
 
-  const apiKey = process.env["LOVABLE_API_KEY"];
-  if (!apiKey) {
+  const lovableKey = process.env["LOVABLE_API_KEY"];
+  if (!lovableKey) {
     throw new ResearchError(
-      "Dami's reasoning service isn't configured on this server yet.",
+      "Dami's reasoning service isn't configured. Add OPENAI_API_KEY for live research or LOVABLE_API_KEY for the legacy local-corpus path.",
       503,
     );
   }
 
-  const response = await fetch(GATEWAY_URL, {
+  const response = await fetch(LOVABLE_GATEWAY_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
     body: JSON.stringify({
-      model: MODEL,
+      model: LOVABLE_MODEL,
       reasoning: { effort: "medium" },
-      instructions: SYSTEM_PROMPT,
+      instructions: LOCAL_SYSTEM_PROMPT,
       text: {
-        format: {
-          type: "json_schema",
-          name: "dami_research_answer",
-          strict: true,
-          schema: SCHEMA,
-        },
+        format: { type: "json_schema", name: "dami_research_answer", strict: true, schema: LOCAL_SCHEMA },
       },
       input: [
         {
@@ -153,10 +233,10 @@ export async function research(question: string): Promise<ResearchAnswer> {
           content: [
             {
               type: "input_text",
-              text: `QUESTION:\n${trimmed}\n\nRETRIEVAL NOTE: ${
+              text: `QUESTION:\n${question}\n\nRETRIEVAL NOTE: ${
                 isInsufficient(results)
-                  ? "The retrieval scores are weak. Be especially cautious and prefer to report insufficient evidence."
-                  : "These are the highest-ranked verified sources for this question."
+                  ? "The retrieval scores are weak. Report the precise evidence gap if the sources do not support a useful conclusion."
+                  : "These are the highest-ranked verified sources currently available for this question."
               }\n\nSOURCES:\n${renderSources(results)}`,
             },
           ],
@@ -167,25 +247,12 @@ export async function research(question: string): Promise<ResearchAnswer> {
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    if (response.status === 429) {
-      throw new ResearchError("Dami is handling a lot of questions right now. Try again shortly.", 429);
-    }
-    if (response.status === 402) {
-      throw new ResearchError(
-        "Dami's research allowance has run out. The workspace owner needs to top up AI credits.",
-        402,
-      );
-    }
-    if (response.status === 403) {
-      throw new ResearchError("Dami's research service is blocked by workspace policy.", 403);
-    }
-    console.error("AI gateway error", response.status, detail);
+    console.error("Legacy reasoning gateway error", response.status, detail);
     throw new ResearchError("Dami couldn't complete the research just now.", 502);
   }
 
   const output = extractJson(await response.json());
   const citations = buildCitations(output.sourceIds ?? []);
-
   return {
     answer: output.answer,
     keyFindings: Array.isArray(output.keyFindings) ? output.keyFindings : [],
@@ -193,6 +260,17 @@ export async function research(question: string): Promise<ResearchAnswer> {
     insufficientEvidence: Boolean(output.insufficientEvidence) || citations.length === 0,
     limitations:
       output.limitations ||
-      "Dami provides legal information and research assistance. Verify every authority at its official source before relying on it.",
+      "Dami provides legal information and research assistance. Verify important authorities at their official source before relying on them in practice.",
   };
+}
+
+export async function research(question: string): Promise<ResearchAnswer> {
+  const trimmed = question.trim();
+  if (!trimmed) throw new ResearchError("Ask Dami a question first.", 400);
+
+  const openAiKey = process.env["OPENAI_API_KEY"];
+  const liveWebEnabled = process.env["DAMI_LIVE_WEB"] !== "false";
+  if (openAiKey && liveWebEnabled) return researchFromWeb(trimmed, openAiKey);
+
+  return researchFromLocalCorpus(trimmed);
 }

@@ -1,7 +1,7 @@
 /**
  * The Dami voice session state machine.
  *
- *   idle → listening → transcribing → researching → answered → speaking
+ *   welcome → idle → listening → transcribing → researching → answered → speaking
  *
  * Every failure path resolves to a friendly, Dami-specific message; raw
  * technical errors are logged, never shown. Nothing is ever faked: if a
@@ -12,12 +12,19 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { askDami } from "@/lib/dami.functions";
+import { getDamiLanguage } from "@/lib/languages";
 import { newId, storage } from "@/lib/storage";
-import { MicrophoneError, startRecording, transcribeSamples, type Recorder } from "@/services/sahara/stt.client";
-import { speak, type SpeechHandle } from "@/services/sahara/tts.client";
+import {
+  speak,
+  startRecording,
+  transcribeSamples,
+  type Recorder,
+  type SpeechHandle,
+} from "@/services/sahara/browser";
 import type { DamiState, ResearchAnswer, ResearchSession, VoiceStage } from "@/lib/types";
 
 const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
+  welcome: "welcome",
   idle: "idle",
   "requesting-permission": "idle",
   listening: "listening",
@@ -29,18 +36,19 @@ const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
 };
 
 export const STAGE_LABEL: Record<VoiceStage, string> = {
+  welcome: "Hi — I'm Dami. Talk to me when you're ready.",
   idle: "Ready when you are.",
   "requesting-permission": "Waiting for microphone permission…",
-  listening: "Listening…",
-  transcribing: "Turning your words into text…",
-  researching: "Researching Ghanaian authorities…",
-  answered: "Here's what Dami found.",
-  speaking: "Dami is speaking…",
+  listening: "I'm listening…",
+  transcribing: "I heard you. Turning that into text…",
+  researching: "I'm checking the law and the strongest available authorities…",
+  answered: "I found something useful for you.",
+  speaking: "I'm speaking…",
   error: "Something went wrong.",
 };
 
 export function useVoiceSession() {
-  const [stage, setStage] = useState<VoiceStage>("idle");
+  const [stage, setStage] = useState<VoiceStage>("welcome");
   const [question, setQuestion] = useState("");
   const [partial, setPartial] = useState("");
   const [answer, setAnswer] = useState<ResearchAnswer | null>(null);
@@ -59,6 +67,14 @@ export function useVoiceSession() {
     if (levelTimer.current) clearInterval(levelTimer.current);
     levelTimer.current = null;
     setLevel(0);
+  }, []);
+
+  useEffect(() => {
+    const welcomeTimer = setTimeout(
+      () => setStage((current) => (current === "welcome" ? "idle" : current)),
+      2200,
+    );
+    return () => clearTimeout(welcomeTimer);
   }, []);
 
   useEffect(
@@ -93,12 +109,13 @@ export function useVoiceSession() {
 
   const readAloud = useCallback(async (text: string) => {
     const settings = storage.getSettings();
+    const language = getDamiLanguage(settings.speechLanguage);
     try {
       setStage("speaking");
       const handle = await speak(text, {
-        accent: settings.voiceAccent,
+        accent: settings.voiceAccent || language.preferredAccent,
         gender: settings.voiceGender,
-        language: settings.codeSwitching ? "en-GH" : "en",
+        language: language.ttsLanguage,
       });
       speechRef.current = handle;
       await handle.ended;
@@ -107,7 +124,7 @@ export function useVoiceSession() {
     } catch (err) {
       speechRef.current = null;
       setStage("answered");
-      setError(err instanceof Error ? err.message : "Dami couldn't read that answer aloud.");
+      setError(err instanceof Error ? err.message : "I couldn't read that answer aloud.");
     }
   }, []);
 
@@ -115,7 +132,7 @@ export function useVoiceSession() {
     async (text: string) => {
       const trimmed = text.trim();
       if (trimmed.length < 3) {
-        setError("Give Dami a little more to work with.");
+        setError("Give me a little more to work with.");
         setStage("error");
         return;
       }
@@ -153,7 +170,7 @@ export function useVoiceSession() {
         setError(
           err instanceof Error && err.message
             ? err.message
-            : "Dami couldn't complete that research. Please try again.",
+            : "I couldn't complete that research. Please try again.",
         );
         setStage("error");
       }
@@ -179,9 +196,9 @@ export function useVoiceSession() {
       recorderRef.current = null;
       stopLevelMeter();
       setError(
-        err instanceof MicrophoneError
+        err instanceof Error && err.name === "MicrophoneError"
           ? err.message
-          : "Dami couldn't start listening. You can type your question instead.",
+          : "I couldn't start listening. You can type your question instead.",
       );
       setStage("error");
     }
@@ -195,11 +212,12 @@ export function useVoiceSession() {
     setStage("transcribing");
 
     const settings = storage.getSettings();
+    const language = getDamiLanguage(settings.speechLanguage);
     try {
       const samples = await recorder.stop();
       const result = await transcribeSamples(samples, {
-        language: settings.codeSwitching ? "en-GH" : "en",
-        codeSwitching: settings.codeSwitching,
+        language: language.code,
+        codeSwitching: language.codeSwitched,
       });
       if (cancelled.current) return;
       setPartial("");
@@ -210,7 +228,7 @@ export function useVoiceSession() {
       setError(
         err instanceof Error && err.message
           ? err.message
-          : "Dami couldn't turn that recording into text.",
+          : "I couldn't turn that recording into text.",
       );
       setStage("error");
     }

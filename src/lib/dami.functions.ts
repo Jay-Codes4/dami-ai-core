@@ -11,7 +11,7 @@ import type { ResearchAnswer } from "@/lib/types";
 const QuestionInput = z.object({ question: z.string().min(3).max(1200) });
 
 export const askDami = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => QuestionInput.parse(input))
+  .validator((input: unknown) => QuestionInput.parse(input))
   .handler(async ({ data }): Promise<ResearchAnswer> => {
     const { research, ResearchError } = await import("@/services/agent/research.server");
     try {
@@ -26,11 +26,13 @@ export const askDami = createServerFn({ method: "POST" })
 export interface ServiceStatus {
   sahara: boolean;
   reasoning: boolean;
+  liveWeb: boolean;
 }
 
 export const getServiceStatus = createServerFn({ method: "GET" }).handler(
   async (): Promise<ServiceStatus> => ({
     sahara: Boolean(process.env["INTRON_API_KEY"]),
-    reasoning: Boolean(process.env["LOVABLE_API_KEY"]),
+    reasoning: Boolean(process.env["OPENAI_API_KEY"] || process.env["LOVABLE_API_KEY"]),
+    liveWeb: Boolean(process.env["OPENAI_API_KEY"] && process.env["DAMI_LIVE_WEB"] !== "false"),
   }),
 );

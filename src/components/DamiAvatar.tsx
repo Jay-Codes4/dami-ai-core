@@ -1,16 +1,7 @@
 import robot from "@/assets/dami-robot.png";
+import "@/dami-avatar.css";
 import { cn } from "@/lib/utils";
 import type { DamiState } from "@/lib/types";
-
-const STATE_CLASS: Record<DamiState, string> = {
-  idle: "dami-state-idle",
-  welcome: "dami-state-welcome",
-  listening: "dami-state-listening",
-  thinking: "dami-state-thinking",
-  speaking: "dami-state-speaking",
-  success: "dami-state-success",
-  error: "dami-state-error",
-};
 
 interface DamiAvatarProps {
   state?: DamiState;
@@ -25,20 +16,24 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
 
   return (
     <div
-      className={cn("relative grid place-items-center", className)}
+      className={cn("dami-avatar relative grid place-items-center", className)}
       style={{ width: size, height: size }}
+      data-dami-state={state}
+      aria-live="polite"
     >
       <span
         aria-hidden
         className="dami-halo absolute inset-0 rounded-full bg-primary/10"
         style={{ transform: `scale(${halo})` }}
       />
+
       <img
         src={robot}
-        alt="Dami, the voice-first Ghanaian legal research assistant"
+        alt={`Dami, the African legal AI agent — ${state}`}
         width={size}
         height={size}
-        className={cn("relative z-10 h-full w-full object-contain", STATE_CLASS[state])}
+        className="dami-character relative z-10 h-full w-full object-contain"
+        draggable={false}
       />
     </div>
   );

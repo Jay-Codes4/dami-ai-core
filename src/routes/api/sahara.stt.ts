@@ -10,8 +10,8 @@ import {
 const Body = z.object({
   audioBase64: z.string().min(1),
   sampleRate: z.number().int().min(8000).max(48000),
-  language: z.string().default("en-GH"),
-  codeSwitching: z.boolean().default(true),
+  language: z.string().default("en"),
+  codeSwitching: z.boolean().default(false),
 });
 
 export const Route = createFileRoute("/api/sahara/stt")({

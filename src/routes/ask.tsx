@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Mic, Send, Square, X } from "lucide-react";
-import { useState } from "react";
+import { ArrowDownToLine, ArrowUpToLine, Loader2, Mic, Send, Square, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AnswerPanel } from "@/components/AnswerPanel";
 import { AppShell } from "@/components/AppShell";
@@ -9,20 +9,23 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useVoiceSession } from "@/hooks/useVoiceSession";
+import { getDesktopBridge, type DesktopDock } from "@/lib/desktop";
+import { DAMI_LANGUAGES, getDamiLanguage, type DamiLanguageCode } from "@/lib/languages";
+import { storage } from "@/lib/storage";
 
 export const Route = createFileRoute("/ask")({
   head: () => ({
     meta: [
-      { title: "Ask Dami — Voice legal research for Ghana" },
+      { title: "Ask Dami — African legal AI agent" },
       {
         name: "description",
         content:
-          "Speak or type your legal question and Dami answers from verified Ghanaian legislation, with linked citations you can verify.",
+          "Speak or type a legal question and Dami researches available authorities, explains the answer clearly and shows the sources behind it.",
       },
-      { property: "og:title", content: "Ask Dami — Voice legal research for Ghana" },
+      { property: "og:title", content: "Ask Dami — African legal AI agent" },
       {
         property: "og:description",
-        content: "Speak your legal question; Dami answers from verified Ghanaian authorities.",
+        content: "Voice-first legal research and assistance for African legal practitioners and legal-information users.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -34,16 +37,87 @@ export const Route = createFileRoute("/ask")({
 function AskPage() {
   const voice = useVoiceSession();
   const [typed, setTyped] = useState("");
+  const [languageCode, setLanguageCode] = useState<DamiLanguageCode>(() => storage.getSettings().speechLanguage);
+  const [desktopDock, setDesktopDock] = useState<DesktopDock | null>(null);
 
   const listening = voice.stage === "listening";
   const busy = voice.isBusy;
+  const selectedLanguage = useMemo(() => getDamiLanguage(languageCode), [languageCode]);
+
+  useEffect(() => {
+    const bridge = getDesktopBridge();
+    if (!bridge) return;
+    void bridge.getDock().then(setDesktopDock).catch(() => setDesktopDock("top"));
+  }, []);
+
+  const changeLanguage = (value: DamiLanguageCode) => {
+    const language = getDamiLanguage(value);
+    const current = storage.getSettings();
+    storage.setSettings({
+      ...current,
+      speechLanguage: value,
+      codeSwitching: language.codeSwitched,
+      voiceAccent: language.preferredAccent,
+    });
+    setLanguageCode(value);
+  };
+
+  const changeDock = async (dock: DesktopDock) => {
+    const bridge = getDesktopBridge();
+    if (!bridge) return;
+    const next = await bridge.setDock(dock);
+    setDesktopDock(next);
+    storage.setSettings({ ...storage.getSettings(), desktopDock: next });
+  };
 
   return (
     <AppShell>
       <div className="grid gap-10 lg:grid-cols-[320px_1fr]">
         <aside className="flex flex-col items-center gap-5 text-center">
           <DamiAvatar state={voice.robotState} size={200} level={voice.level} />
-          <p className="text-sm font-medium text-muted-foreground">{voice.statusText}</p>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-muted-foreground">{voice.statusText}</p>
+            <p className="text-xs text-muted-foreground/80">
+              Listening mode: {selectedLanguage.shortLabel}
+            </p>
+          </div>
+
+          {desktopDock && (
+            <div className="flex items-center gap-2 rounded-lg border border-border/70 p-1" aria-label="Desktop position">
+              <Button
+                type="button"
+                size="sm"
+                variant={desktopDock === "top" ? "secondary" : "ghost"}
+                onClick={() => void changeDock("top")}
+              >
+                <ArrowUpToLine className="mr-1.5 h-4 w-4" /> Top
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={desktopDock === "bottom" ? "secondary" : "ghost"}
+                onClick={() => void changeDock("bottom")}
+              >
+                <ArrowDownToLine className="mr-1.5 h-4 w-4" /> Bottom
+              </Button>
+            </div>
+          )}
+
+          <label className="w-full text-left text-xs font-medium text-muted-foreground">
+            Voice language
+            <select
+              value={languageCode}
+              disabled={listening || busy}
+              onChange={(event) => changeLanguage(event.target.value as DamiLanguageCode)}
+              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {DAMI_LANGUAGES.map((language) => (
+                <option key={language.code} value={language.code}>
+                  {language.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <div className="flex flex-wrap justify-center gap-2">
             {listening ? (
@@ -89,7 +163,7 @@ function AskPage() {
               id="typed-question"
               value={typed}
               onChange={(event) => setTyped(event.target.value)}
-              placeholder="e.g. What are my rights if the police arrest me in Ghana?"
+              placeholder="e.g. Find the strongest authorities on unlawful detention in my jurisdiction and explain what they mean."
               rows={4}
             />
             <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
@@ -126,8 +200,9 @@ function AskPage() {
               <div className="rounded-xl border border-dashed border-border/70 p-10 text-center">
                 <h1 className="text-2xl font-semibold tracking-tight">Ask Dami</h1>
                 <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
-                  Tap “Talk with Dami”, ask your question out loud, then tap “Done speaking”. Your
-                  answer will appear here with every authority Dami relied on.
+                  Tell Dami the legal question, jurisdiction or task in your own words. Dami will
+                  identify what you need, research the strongest available authorities and explain
+                  the result with sources rather than handing you a page of generic links.
                 </p>
               </div>
             )

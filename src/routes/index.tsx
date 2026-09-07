@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowRight, Mic, ScrollText, ShieldCheck } from "lucide-react";
+import { ArrowRight, Globe2, Mic, ScrollText, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
@@ -12,17 +12,17 @@ import type { ResearchSession } from "@/lib/types";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Dami AI — A Voice for Justice in Ghana" },
+      { title: "Dami AI — A Voice for Justice across Africa" },
       {
         name: "description",
         content:
-          "Ask legal questions out loud and get plain-language answers grounded in verified Ghanaian legislation, the Constitution and official public sources.",
+          "Dami is an African legal AI agent for legal research, legal information and source-grounded assistance across jurisdictions and legal practice workflows.",
       },
-      { property: "og:title", content: "Dami AI — A Voice for Justice in Ghana" },
+      { property: "og:title", content: "Dami AI — A Voice for Justice across Africa" },
       {
         property: "og:description",
         content:
-          "Voice-first legal research for Ghana, grounded in the Constitution, Acts of Parliament and official public sources.",
+          "Voice-first African legal intelligence with multilingual speech, source-grounded research and practitioner-focused assistance.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -54,19 +54,27 @@ function Home() {
             A Voice for Justice
           </p>
           <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
-            Ask Ghanaian legal questions out loud
+            African legal intelligence you can talk to
           </h1>
           <p className="mx-auto max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground">
-            Dami listens, researches the Constitution, Acts of Parliament and official public
-            sources, then explains what it found in plain language — with every authority linked so
-            you can check it yourself.
+            Dami listens naturally, understands the jurisdiction and legal task you are asking about,
+            researches available authorities, and returns a useful answer with sources you can verify.
+            It is built for lawyers, legal researchers, students, public-service teams and people who
+            need clearer access to legal information.
           </p>
         </div>
-        <Button asChild size="lg" className="shadow-[var(--shadow-lift)]">
-          <Link to="/ask">
-            <Mic className="mr-2 h-5 w-5" /> Talk with Dami
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Button asChild size="lg" className="shadow-[var(--shadow-lift)]">
+            <Link to="/ask">
+              <Mic className="mr-2 h-5 w-5" /> Talk with Dami
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline">
+            <Link to="/research">
+              <Globe2 className="mr-2 h-5 w-5" /> Research with Dami
+            </Link>
+          </Button>
+        </div>
       </section>
 
       <section className="mt-14 grid gap-4 md:grid-cols-3">
@@ -74,17 +82,17 @@ function Home() {
           {
             icon: Mic,
             title: "Speak naturally",
-            body: "Ask in English or Ghanaian-accented English. Dami transcribes, researches and can read the answer back to you.",
+            body: "Use an African-accented voice or switch between the launch languages. Dami listens, follows the conversation and can speak the answer back.",
           },
           {
             icon: ScrollText,
-            title: "Grounded in real law",
-            body: "Answers are built only from verified Ghanaian sources. Nothing is invented, and every citation links to its official home.",
+            title: "Research that earns trust",
+            body: "Dami prioritizes authoritative legal sources, explains why they matter and shows the authorities behind the answer instead of returning generic search snippets.",
           },
           {
             icon: ShieldCheck,
-            title: "Honest about limits",
-            body: "When the sources don't answer your question, Dami says so instead of guessing, and points you toward legal aid.",
+            title: "Useful, not overconfident",
+            body: "Dami separates verified law from uncertainty, identifies jurisdiction limits and tells you when stronger authority or qualified legal advice is needed.",
           },
         ].map(({ icon: Icon, title, body }) => (
           <Card key={title} className="shadow-[var(--shadow-soft)]">

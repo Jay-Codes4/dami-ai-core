@@ -1,0 +1,88 @@
+.dami-avatar {
+  isolation: isolate;
+}
+
+.dami-character {
+  pointer-events: none;
+  user-select: none;
+  transform-origin: 50% 56%;
+  will-change: transform, filter;
+}
+
+.dami-avatar[data-dami-state="idle"] .dami-character {
+  animation: dami-idle 4.8s ease-in-out infinite;
+}
+
+.dami-avatar[data-dami-state="welcome"] .dami-character {
+  animation: dami-welcome 1.9s ease-in-out 1, dami-idle 4.8s ease-in-out 1.9s infinite;
+}
+
+.dami-avatar[data-dami-state="listening"] .dami-character {
+  animation: dami-listening 1.45s ease-in-out infinite;
+  filter: drop-shadow(0 10px 22px color-mix(in oklab, var(--primary) 18%, transparent));
+}
+
+.dami-avatar[data-dami-state="thinking"] .dami-character {
+  animation: dami-thinking 2.2s ease-in-out infinite;
+}
+
+.dami-avatar[data-dami-state="speaking"] .dami-character {
+  animation: dami-speaking 1s ease-in-out infinite;
+  filter: drop-shadow(0 10px 22px color-mix(in oklab, var(--primary) 20%, transparent));
+}
+
+.dami-avatar[data-dami-state="success"] .dami-character {
+  animation: dami-success 900ms ease-out 1, dami-idle 4.8s ease-in-out 900ms infinite;
+}
+
+.dami-avatar[data-dami-state="error"] .dami-character {
+  animation: dami-error 720ms ease-in-out 1, dami-idle 5.2s ease-in-out 720ms infinite;
+}
+
+@keyframes dami-idle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(0.5deg); }
+}
+
+@keyframes dami-welcome {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+  20% { transform: translateY(-5px) rotate(-4deg) scale(1.015); }
+  42% { transform: translateY(-8px) rotate(4deg) scale(1.025); }
+  64% { transform: translateY(-5px) rotate(-3deg) scale(1.015); }
+  82% { transform: translateY(-3px) rotate(2deg) scale(1.008); }
+}
+
+@keyframes dami-listening {
+  0%, 100% { transform: translateY(-2px) scale(1); }
+  50% { transform: translateY(-7px) scale(1.02); }
+}
+
+@keyframes dami-thinking {
+  0%, 100% { transform: translateY(-1px) rotate(-1.6deg); }
+  50% { transform: translateY(-5px) rotate(1.6deg); }
+}
+
+@keyframes dami-speaking {
+  0%, 100% { transform: translateY(-2px) rotate(-1deg) scale(1); }
+  35% { transform: translateY(-7px) rotate(1.4deg) scale(1.012); }
+  70% { transform: translateY(-4px) rotate(-0.5deg) scale(0.998); }
+}
+
+@keyframes dami-success {
+  0%, 100% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-14px) scale(1.04); }
+}
+
+@keyframes dami-error {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(0deg); }
+  25% { transform: translateX(-4px) translateY(2px) rotate(-1.5deg); }
+  60% { transform: translateX(4px) translateY(2px) rotate(1.5deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dami-character {
+    transform: none !important;
+    animation: none !important;
+    filter: none !important;
+  }
+}
