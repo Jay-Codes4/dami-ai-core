@@ -6,9 +6,10 @@
  * No processing is simulated.
  */
 
-import { formatCitation } from "@/services/citations/citations";
 import { newId, storage } from "@/lib/storage";
 import type { ResearchSession, SavedDocument, SavedDocumentKind } from "@/lib/types";
+import { formatCitation } from "@/services/citations/citations";
+import { isDesktopRuntime, saveDesktopFile } from "@/services/tools/desktop.client";
 
 const DISCLAIMER =
   "Dami AI provides legal information and research assistance. It is not a substitute for advice from a qualified lawyer. Verify every authority at its official source.";
@@ -75,15 +76,25 @@ export function saveDocument(doc: SavedDocument): void {
   storage.saveDocument(doc);
 }
 
-export function exportDocument(doc: SavedDocument, format: "md" | "txt" = "md"): void {
+export async function exportDocument(
+  doc: SavedDocument,
+  format: "md" | "txt" = "md",
+): Promise<void> {
   if (typeof window === "undefined") return;
+
+  const filename = `${slugify(doc.title)}.${format}`;
+  if (isDesktopRuntime()) {
+    await saveDesktopFile(doc.body, filename);
+    return;
+  }
+
   const blob = new Blob([doc.body], {
     type: format === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8",
   });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${slugify(doc.title)}.${format}`;
+  anchor.download = filename;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
