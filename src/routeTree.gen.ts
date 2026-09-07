@@ -10,33 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiSaharaSttRouteImport } from './routes/api/sahara.stt'
+import { Route as ApiSaharaTtsRouteImport } from './routes/api/sahara.tts'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSaharaSttRoute = ApiSaharaSttRouteImport.update({
+  id: '/api/sahara/stt',
+  path: '/api/sahara/stt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSaharaTtsRoute = ApiSaharaTtsRouteImport.update({
+  id: '/api/sahara/tts',
+  path: '/api/sahara/tts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/sahara/stt': typeof ApiSaharaSttRoute
+  '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/sahara/stt': typeof ApiSaharaSttRoute
+  '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/sahara/stt': typeof ApiSaharaSttRoute
+  '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/sahara/stt' | '/api/sahara/tts'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/sahara/stt' | '/api/sahara/tts'
+  id: '__root__' | '/' | '/api/sahara/stt' | '/api/sahara/tts'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiSaharaSttRoute: typeof ApiSaharaSttRoute
+  ApiSaharaTtsRoute: typeof ApiSaharaTtsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +68,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/sahara/stt': {
+      id: '/api/sahara/stt'
+      path: '/api/sahara/stt'
+      fullPath: '/api/sahara/stt'
+      preLoaderRoute: typeof ApiSaharaSttRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/sahara/tts': {
+      id: '/api/sahara/tts'
+      path: '/api/sahara/tts'
+      fullPath: '/api/sahara/tts'
+      preLoaderRoute: typeof ApiSaharaTtsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiSaharaSttRoute: ApiSaharaSttRoute,
+  ApiSaharaTtsRoute: ApiSaharaTtsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
