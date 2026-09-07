@@ -5,16 +5,6 @@ import "@/dami-avatar.css";
 import { cn } from "@/lib/utils";
 import type { DamiState } from "@/lib/types";
 
-const STATE_CLASS: Record<DamiState, string> = {
-  idle: "dami-state-idle",
-  welcome: "dami-state-welcome",
-  listening: "dami-state-listening",
-  thinking: "dami-state-thinking",
-  speaking: "dami-state-speaking",
-  success: "dami-state-success",
-  error: "dami-state-error",
-};
-
 interface DamiAvatarProps {
   state?: DamiState;
   size?: number;
@@ -38,15 +28,16 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
     let currentY = 0;
 
     const render = () => {
-      currentX += (targetX - currentX) * 0.12;
-      currentY += (targetY - currentY) * 0.12;
+      currentX += (targetX - currentX) * 0.11;
+      currentY += (targetY - currentY) * 0.11;
 
-      root.style.setProperty("--dami-look-x", `${currentX * 9}px`);
-      root.style.setProperty("--dami-look-y", `${currentY * 6}px`);
-      root.style.setProperty("--dami-tilt-y", `${currentX * 7}deg`);
-      root.style.setProperty("--dami-tilt-x", `${currentY * -5}deg`);
-      root.style.setProperty("--dami-shift-x", `${currentX * 5}px`);
-      root.style.setProperty("--dami-shift-y", `${currentY * 3}px`);
+      // The head does most of the tracking. The torso only reacts subtly.
+      root.style.setProperty("--dami-head-x", `${currentX * 11}px`);
+      root.style.setProperty("--dami-head-y", `${currentY * 7}px`);
+      root.style.setProperty("--dami-head-turn", `${currentX * 13}deg`);
+      root.style.setProperty("--dami-head-nod", `${currentY * -8}deg`);
+      root.style.setProperty("--dami-body-turn", `${currentX * 2.2}deg`);
+      root.style.setProperty("--dami-arm-react", `${currentX * 5}deg`);
 
       frame = window.requestAnimationFrame(render);
     };
@@ -55,8 +46,8 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
       const bounds = root.getBoundingClientRect();
       const centerX = bounds.left + bounds.width / 2;
       const centerY = bounds.top + bounds.height / 2;
-      const rangeX = Math.max(window.innerWidth * 0.42, bounds.width);
-      const rangeY = Math.max(window.innerHeight * 0.42, bounds.height);
+      const rangeX = Math.max(window.innerWidth * 0.38, bounds.width);
+      const rangeY = Math.max(window.innerHeight * 0.38, bounds.height);
 
       targetX = Math.max(-1, Math.min(1, (event.clientX - centerX) / rangeX));
       targetY = Math.max(-1, Math.min(1, (event.clientY - centerY) / rangeY));
@@ -86,8 +77,12 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
     root.dataset.engaged = "true";
     window.setTimeout(() => {
       if (rootRef.current) delete rootRef.current.dataset.engaged;
-    }, 520);
+    }, 850);
   };
+
+  const part = (name: string, className: string) => (
+    <img src={robot} alt="" aria-hidden className={cn("dami-part", className)} draggable={false} />
+  );
 
   return (
     <div
@@ -95,6 +90,7 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
       className={cn("dami-avatar relative grid place-items-center", className)}
       style={{ width: size, height: size }}
       data-dami-state={state}
+      aria-label={`Dami, the African legal AI agent — ${state}`}
       aria-live="polite"
       onPointerDown={reactToPointer}
     >
@@ -104,18 +100,11 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
         style={{ transform: `scale(${halo})` }}
       />
 
-      <div className="dami-look-layer relative z-10 h-full w-full">
-        <img
-          src={robot}
-          alt={`Dami, the African legal AI agent — ${state}`}
-          width={size}
-          height={size}
-          className={cn("h-full w-full object-contain", STATE_CLASS[state])}
-          draggable={false}
-        />
-
-        <span aria-hidden className="dami-eye dami-eye-left" />
-        <span aria-hidden className="dami-eye dami-eye-right" />
+      <div className="dami-rig relative z-10 h-full w-full" role="img" aria-label={`Dami is ${state}`}>
+        {part("body", "dami-body")}
+        {part("left arm", "dami-arm dami-arm-left")}
+        {part("right arm", "dami-arm dami-arm-right")}
+        {part("head", "dami-head")}
       </div>
     </div>
   );
