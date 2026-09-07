@@ -11,7 +11,7 @@ import type { ResearchAnswer } from "@/lib/types";
 const QuestionInput = z.object({ question: z.string().min(3).max(1200) });
 
 export const askDami = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => QuestionInput.parse(input))
+  .validator((input: unknown) => QuestionInput.parse(input))
   .handler(async ({ data }): Promise<ResearchAnswer> => {
     const { research, ResearchError } = await import("@/services/agent/research.server");
     try {
