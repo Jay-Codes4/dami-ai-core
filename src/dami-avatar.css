@@ -1,216 +1,88 @@
 .dami-avatar {
-  --dami-head-x: 0px;
-  --dami-head-y: 0px;
-  --dami-head-turn: 0deg;
-  --dami-head-nod: 0deg;
-  --dami-body-turn: 0deg;
-  --dami-arm-react: 0deg;
-  perspective: 900px;
   isolation: isolate;
-  cursor: default;
 }
 
-.dami-rig {
-  transform-style: preserve-3d;
-  animation: dami-breathe 4.8s ease-in-out infinite;
-}
-
-.dami-part {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+.dami-character {
   pointer-events: none;
   user-select: none;
-  will-change: transform;
+  transform-origin: 50% 56%;
+  will-change: transform, filter;
 }
 
-/* Each layer is a clipped copy of the original Dami art. This gives the
-   existing character independent joints without drawing fake eyes over it. */
-.dami-head {
-  clip-path: polygon(25% 4%, 76% 4%, 80% 40%, 66% 48%, 34% 48%, 20% 40%);
-  transform-origin: 50% 42%;
-  transform:
-    translate3d(var(--dami-head-x), var(--dami-head-y), 18px)
-    rotateX(var(--dami-head-nod))
-    rotateY(var(--dami-head-turn));
-  transition: filter 180ms ease;
-  z-index: 4;
+.dami-avatar[data-dami-state="idle"] .dami-character {
+  animation: dami-idle 4.8s ease-in-out infinite;
 }
 
-.dami-body {
-  clip-path: polygon(30% 38%, 70% 38%, 75% 90%, 25% 90%);
-  transform-origin: 50% 55%;
-  transform: rotateY(var(--dami-body-turn));
-  z-index: 2;
+.dami-avatar[data-dami-state="welcome"] .dami-character {
+  animation: dami-welcome 1.9s ease-in-out 1, dami-idle 4.8s ease-in-out 1.9s infinite;
 }
 
-.dami-arm-left {
-  clip-path: polygon(8% 38%, 37% 38%, 38% 88%, 5% 88%);
-  transform-origin: 34% 43%;
-  transform: rotate(calc(var(--dami-arm-react) * -0.45));
-  z-index: 3;
+.dami-avatar[data-dami-state="listening"] .dami-character {
+  animation: dami-listening 1.45s ease-in-out infinite;
+  filter: drop-shadow(0 10px 22px color-mix(in oklab, var(--primary) 18%, transparent));
 }
 
-.dami-arm-right {
-  clip-path: polygon(63% 36%, 94% 35%, 98% 86%, 62% 86%);
-  transform-origin: 66% 42%;
-  transform: rotate(calc(var(--dami-arm-react) * 0.45));
-  z-index: 3;
+.dami-avatar[data-dami-state="thinking"] .dami-character {
+  animation: dami-thinking 2.2s ease-in-out infinite;
 }
 
-.dami-avatar[data-engaged="true"] .dami-head {
-  animation: dami-curious-head 850ms cubic-bezier(0.2, 0.8, 0.2, 1);
+.dami-avatar[data-dami-state="speaking"] .dami-character {
+  animation: dami-speaking 1s ease-in-out infinite;
+  filter: drop-shadow(0 10px 22px color-mix(in oklab, var(--primary) 20%, transparent));
 }
 
-.dami-avatar[data-engaged="true"] .dami-arm-left {
-  animation: dami-mini-wave 850ms ease-in-out;
+.dami-avatar[data-dami-state="success"] .dami-character {
+  animation: dami-success 900ms ease-out 1, dami-idle 4.8s ease-in-out 900ms infinite;
 }
 
-/* Welcome is a real arm gesture now, not a whole-image wobble. */
-.dami-avatar[data-dami-state="welcome"] .dami-arm-left {
-  animation: dami-wave-arm 2.15s ease-in-out 1;
-}
-.dami-avatar[data-dami-state="welcome"] .dami-head {
-  animation: dami-welcome-head 2.15s ease-in-out 1;
+.dami-avatar[data-dami-state="error"] .dami-character {
+  animation: dami-error 720ms ease-in-out 1, dami-idle 5.2s ease-in-out 720ms infinite;
 }
 
-/* Listening: lean in, open posture and small responsive arm motion. */
-.dami-avatar[data-dami-state="listening"] .dami-head {
-  animation: dami-listen-head 1.7s ease-in-out infinite;
-}
-.dami-avatar[data-dami-state="listening"] .dami-arm-left,
-.dami-avatar[data-dami-state="listening"] .dami-arm-right {
-  animation: dami-listen-arms 1.7s ease-in-out infinite alternate;
+@keyframes dami-idle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(0.5deg); }
 }
 
-/* Thinking/researching: thoughtful head tilt with asymmetric hands. */
-.dami-avatar[data-dami-state="thinking"] .dami-head {
-  animation: dami-think-head 2.3s ease-in-out infinite;
-}
-.dami-avatar[data-dami-state="thinking"] .dami-arm-left {
-  animation: dami-think-left 2.3s ease-in-out infinite;
-}
-.dami-avatar[data-dami-state="thinking"] .dami-arm-right {
-  animation: dami-think-right 2.3s ease-in-out infinite;
+@keyframes dami-welcome {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+  20% { transform: translateY(-5px) rotate(-4deg) scale(1.015); }
+  42% { transform: translateY(-8px) rotate(4deg) scale(1.025); }
+  64% { transform: translateY(-5px) rotate(-3deg) scale(1.015); }
+  82% { transform: translateY(-3px) rotate(2deg) scale(1.008); }
 }
 
-/* Speaking: conversational nods plus alternating hand gestures. */
-.dami-avatar[data-dami-state="speaking"] .dami-head {
-  animation: dami-talk-head 1.15s ease-in-out infinite;
-}
-.dami-avatar[data-dami-state="speaking"] .dami-arm-left {
-  animation: dami-talk-left 1.4s ease-in-out infinite;
-}
-.dami-avatar[data-dami-state="speaking"] .dami-arm-right {
-  animation: dami-talk-right 1.4s ease-in-out 0.35s infinite;
+@keyframes dami-listening {
+  0%, 100% { transform: translateY(-2px) scale(1); }
+  50% { transform: translateY(-7px) scale(1.02); }
 }
 
-.dami-avatar[data-dami-state="success"] .dami-head {
-  animation: dami-success-head 900ms ease-out 1;
-}
-.dami-avatar[data-dami-state="success"] .dami-arm-left {
-  animation: dami-success-left 1s ease-out 1;
-}
-.dami-avatar[data-dami-state="success"] .dami-arm-right {
-  animation: dami-success-right 1s ease-out 1;
+@keyframes dami-thinking {
+  0%, 100% { transform: translateY(-1px) rotate(-1.6deg); }
+  50% { transform: translateY(-5px) rotate(1.6deg); }
 }
 
-.dami-avatar[data-dami-state="error"] .dami-head {
-  animation: dami-error-head 700ms ease-in-out 1;
-}
-.dami-avatar[data-dami-state="error"] .dami-arm-left,
-.dami-avatar[data-dami-state="error"] .dami-arm-right {
-  animation: dami-error-arms 700ms ease-in-out 1;
+@keyframes dami-speaking {
+  0%, 100% { transform: translateY(-2px) rotate(-1deg) scale(1); }
+  35% { transform: translateY(-7px) rotate(1.4deg) scale(1.012); }
+  70% { transform: translateY(-4px) rotate(-0.5deg) scale(0.998); }
 }
 
-@keyframes dami-breathe {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+@keyframes dami-success {
+  0%, 100% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-14px) scale(1.04); }
 }
-@keyframes dami-curious-head {
-  0%, 100% { filter: none; }
-  35% { transform: translate3d(var(--dami-head-x), calc(var(--dami-head-y) - 3px), 18px) rotateZ(-5deg); }
-  70% { transform: translate3d(var(--dami-head-x), var(--dami-head-y), 18px) rotateZ(3deg); }
-}
-@keyframes dami-mini-wave {
-  0%, 100% { transform: rotate(0deg); }
-  30% { transform: rotate(-18deg); }
-  55% { transform: rotate(-8deg); }
-  78% { transform: rotate(-18deg); }
-}
-@keyframes dami-wave-arm {
-  0%, 100% { transform: rotate(0deg); }
-  18% { transform: rotate(-58deg); }
-  36% { transform: rotate(-38deg); }
-  54% { transform: rotate(-62deg); }
-  72% { transform: rotate(-40deg); }
-  88% { transform: rotate(-55deg); }
-}
-@keyframes dami-welcome-head {
-  0%, 100% { transform: translate3d(var(--dami-head-x), var(--dami-head-y), 18px); }
-  35% { transform: translate3d(var(--dami-head-x), calc(var(--dami-head-y) - 3px), 18px) rotateZ(5deg); }
-  70% { transform: translate3d(var(--dami-head-x), var(--dami-head-y), 18px) rotateZ(-2deg); }
-}
-@keyframes dami-listen-head {
-  0%, 100% { transform: translate3d(var(--dami-head-x), var(--dami-head-y), 18px) rotateX(var(--dami-head-nod)) rotateY(var(--dami-head-turn)); }
-  50% { transform: translate3d(var(--dami-head-x), calc(var(--dami-head-y) + 2px), 20px) rotateX(calc(var(--dami-head-nod) - 3deg)) rotateY(var(--dami-head-turn)); }
-}
-@keyframes dami-listen-arms {
-  from { transform: rotate(-2deg); }
-  to { transform: rotate(4deg); }
-}
-@keyframes dami-think-head {
-  0%, 100% { transform: translate3d(var(--dami-head-x), var(--dami-head-y), 18px) rotateZ(-4deg); }
-  50% { transform: translate3d(calc(var(--dami-head-x) + 3px), calc(var(--dami-head-y) - 3px), 18px) rotateZ(5deg); }
-}
-@keyframes dami-think-left {
-  0%, 100% { transform: rotate(-8deg); }
-  50% { transform: rotate(-20deg); }
-}
-@keyframes dami-think-right {
-  0%, 100% { transform: rotate(8deg); }
-  50% { transform: rotate(16deg); }
-}
-@keyframes dami-talk-head {
-  0%, 100% { transform: translate3d(var(--dami-head-x), var(--dami-head-y), 18px) rotateZ(-1deg); }
-  50% { transform: translate3d(var(--dami-head-x), calc(var(--dami-head-y) + 2px), 18px) rotateZ(2deg); }
-}
-@keyframes dami-talk-left {
-  0%, 100% { transform: rotate(-5deg); }
-  50% { transform: rotate(-22deg); }
-}
-@keyframes dami-talk-right {
-  0%, 100% { transform: rotate(5deg); }
-  50% { transform: rotate(20deg); }
-}
-@keyframes dami-success-head {
-  0%, 100% { transform: translate3d(var(--dami-head-x), var(--dami-head-y), 18px); }
-  45% { transform: translate3d(var(--dami-head-x), calc(var(--dami-head-y) - 8px), 18px) scale(1.035); }
-}
-@keyframes dami-success-left {
-  0%, 100% { transform: rotate(0deg); }
-  55% { transform: rotate(-38deg); }
-}
-@keyframes dami-success-right {
-  0%, 100% { transform: rotate(0deg); }
-  55% { transform: rotate(38deg); }
-}
-@keyframes dami-error-head {
-  0%, 100% { transform: translate3d(var(--dami-head-x), var(--dami-head-y), 18px); }
-  25% { transform: translate3d(calc(var(--dami-head-x) - 4px), var(--dami-head-y), 18px) rotateZ(-3deg); }
-  60% { transform: translate3d(calc(var(--dami-head-x) + 4px), var(--dami-head-y), 18px) rotateZ(3deg); }
-}
-@keyframes dami-error-arms {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(8deg); }
+
+@keyframes dami-error {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(0deg); }
+  25% { transform: translateX(-4px) translateY(2px) rotate(-1.5deg); }
+  60% { transform: translateX(4px) translateY(2px) rotate(1.5deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dami-rig,
-  .dami-part {
+  .dami-character {
     transform: none !important;
     animation: none !important;
+    filter: none !important;
   }
 }
