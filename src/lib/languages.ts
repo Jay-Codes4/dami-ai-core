@@ -10,9 +10,9 @@ export interface DamiLanguage {
 }
 
 /**
- * Deadline launch set. Sahara supports a wider African language surface; we
- * intentionally start with a small set that can be tested thoroughly before
- * submission and expand after the challenge.
+ * Deadline launch set. Sahara supports a wider African STT surface than its
+ * current TTS catalogue. For speech output we map every launch language to an
+ * accent/language pair that the Sahara TTS API actually supports today.
  */
 export const DAMI_LANGUAGES: DamiLanguage[] = [
   {
@@ -21,15 +21,17 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
     shortLabel: "English",
     codeSwitched: false,
     ttsLanguage: "en",
-    preferredAccent: "twi",
+    preferredAccent: "yoruba",
   },
   {
     code: "ak",
     label: "Akan ↔ English",
     shortLabel: "Akan-English",
     codeSwitched: true,
+    // Sahara TTS does not currently expose Akan/Twi output, so English uses a
+    // supported West African English accent while STT can still handle Akan.
     ttsLanguage: "en",
-    preferredAccent: "twi",
+    preferredAccent: "yoruba",
   },
   {
     code: "yo",
@@ -52,8 +54,8 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
     label: "Nigerian Pidgin ↔ English",
     shortLabel: "Pidgin-English",
     codeSwitched: true,
-    ttsLanguage: "en",
-    preferredAccent: "twi",
+    ttsLanguage: "pcm",
+    preferredAccent: "pidgin",
   },
 ];
 
