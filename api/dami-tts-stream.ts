@@ -2,9 +2,20 @@ import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 
 const INTRON_TTS_STREAM_URL = "wss://infer.voice.intron.io/tts/v1/stream";
-const ALLOWED_ACCENTS = new Set(["twi", "ghanaian", "yoruba", "swahili"]);
-const ALLOWED_LANGUAGES = new Set(["en", "ak", "yo", "sw", "pcm"]);
-const ALLOWED_GENDERS = new Set(["female", "male"]);
+const ALLOWED_ACCENTS = new Set([
+  "afrikaans",
+  "hausa",
+  "igbo",
+  "luganda",
+  "sepedi",
+  "swahili",
+  "setswana",
+  "xhosa",
+  "yoruba",
+  "zulu",
+  "pidgin",
+]);
+const ALLOWED_LANGUAGES = new Set(["en", "yo", "sw", "pcm"]);
 const ALLOWED_FORMATS = new Set(["wav", "opus"]);
 
 function pick(value: string | null, allowed: Set<string>, fallback: string) {
@@ -34,14 +45,15 @@ wss.on("connection", (client, request) => {
   }
 
   const requestUrl = new URL(request.url ?? "/", "http://localhost");
-  const accent = pick(requestUrl.searchParams.get("voice_accent"), ALLOWED_ACCENTS, "twi");
-  const gender = pick(requestUrl.searchParams.get("voice_gender"), ALLOWED_GENDERS, "female");
+  const accent = pick(requestUrl.searchParams.get("voice_accent"), ALLOWED_ACCENTS, "yoruba");
   const language = pick(requestUrl.searchParams.get("voice_language"), ALLOWED_LANGUAGES, "en");
   const format = pick(requestUrl.searchParams.get("output_audio_format"), ALLOWED_FORMATS, "wav");
 
   const upstreamUrl = new URL(INTRON_TTS_STREAM_URL);
   upstreamUrl.searchParams.set("voice_accent", accent);
-  upstreamUrl.searchParams.set("voice_gender", gender);
+  // Dami's product voice is intentionally female. Do not allow stale client
+  // settings to silently switch the live voice back to male.
+  upstreamUrl.searchParams.set("voice_gender", "female");
   upstreamUrl.searchParams.set("voice_language", language);
   upstreamUrl.searchParams.set("output_audio_format", format);
 
