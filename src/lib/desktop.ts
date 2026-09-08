@@ -4,6 +4,9 @@ export interface DamiDesktopBridge {
   isDesktop: true;
   getDock(): Promise<DesktopDock>;
   setDock(dock: DesktopDock): Promise<DesktopDock>;
+  setLaunchAtStartup(enabled: boolean): Promise<boolean>;
+  show(): Promise<unknown>;
+  hide(): Promise<unknown>;
 }
 
 declare global {
