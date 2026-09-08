@@ -1,5 +1,8 @@
 {
   "name": "dami-ai-core",
+  "version": "0.1.0",
+  "description": "Dami AI — a voice-first African legal assistant",
+  "author": "Dami AI",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -10,8 +13,37 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "desktop:dev": "electron desktop/main.cjs",
+    "desktop:build:win": "electron-builder --win nsis --x64",
     "lint": "eslint .",
     "format": "prettier --write ."
+  },
+  "build": {
+    "appId": "ai.dami.desktop",
+    "productName": "Dami",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Dami-Setup.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Dami"
+    }
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -80,6 +112,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^44.2.0",
+    "electron-builder": "^26.0.12",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
