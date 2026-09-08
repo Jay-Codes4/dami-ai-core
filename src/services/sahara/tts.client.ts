@@ -56,20 +56,16 @@ function splitLong(text: string, limit: number) {
   return chunks;
 }
 
-function sentenceChunks(text: string) {
+function speechChunks(text: string) {
   const clean = cleanSpeechText(text);
-  const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [clean];
-  const chunks: string[] = [];
-  for (const sentence of sentences) {
-    if (sentence.length <= 110) chunks.push(sentence);
-    else chunks.push(...splitLong(sentence, 95));
-  }
-  // Very short first chunk gets the first audible words back quickly.
-  if (chunks[0] && chunks[0].length > 55) {
-    const first = splitLong(chunks.shift()!, 48);
-    chunks.unshift(...first);
-  }
-  return chunks.filter((chunk) => chunk.length >= 2);
+  if (!clean) return [];
+  // Keep only the opening phrase tiny for fast first audio. Everything after it is
+  // deliberately much larger so there are far fewer network/audio boundaries.
+  const firstParts = splitLong(clean, 52);
+  const first = firstParts.shift();
+  if (!first) return [];
+  const remainder = firstParts.join(" ");
+  return [first, ...splitLong(remainder, 1200)].filter(Boolean);
 }
 
 function browserSpeech(text: string, o: VoiceOptions): SpeechHandle {
@@ -135,8 +131,21 @@ async function requestChunk(text: string, o: VoiceOptions) {
   }
 }
 
+type PreparedAudio = { audio: HTMLAudioElement; url: string };
+
+async function prepareChunk(text: string, o: VoiceOptions): Promise<PreparedAudio | null> {
+  const blob = await requestChunk(text, o);
+  if (!blob) return null;
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  audio.preload = "auto";
+  audio.playbackRate = 1.04;
+  try { audio.load(); } catch { /* no-op */ }
+  return { audio, url };
+}
+
 async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle | null> {
-  const chunks = sentenceChunks(text);
+  const chunks = speechChunks(text);
   if (!chunks.length) return null;
 
   let stopped = false;
@@ -144,20 +153,36 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
   let settled = false;
   let startedDone = false;
   let currentAudio: HTMLAudioElement | null = null;
+  let currentIndex = -1;
   let fallbackHandle: SpeechHandle | null = null;
-  const urls = new Set<string>();
   let resumeWaiters: Array<() => void> = [];
   let resolveStarted!: () => void;
   let resolveEnded!: () => void;
   const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
   const ended = new Promise<void>((resolve) => { resolveEnded = resolve; });
   const markStarted = () => { if (!startedDone) { startedDone = true; resolveStarted(); } };
+
+  // Prepare every audio element immediately, not merely the blob. This means a
+  // resumed or next chunk can start without having to construct/load a new player.
+  const prepared = chunks.map((chunk) => prepareChunk(chunk, o));
+  const preparedUrls = new Set<string>();
+
+  const cleanupPrepared = async () => {
+    for (let i = 0; i < prepared.length; i++) {
+      try {
+        const item = await Promise.race([prepared[i], Promise.resolve(null)]);
+        if (item?.url) preparedUrls.add(item.url);
+      } catch { /* no-op */ }
+    }
+    for (const url of preparedUrls) URL.revokeObjectURL(url);
+    preparedUrls.clear();
+  };
+
   const finish = () => {
     if (settled) return;
     settled = true;
     markStarted();
-    for (const url of urls) URL.revokeObjectURL(url);
-    urls.clear();
+    void cleanupPrepared();
     resolveEnded();
   };
   const waitUntilResumed = async () => {
@@ -165,36 +190,26 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     await new Promise<void>((resolve) => resumeWaiters.push(resolve));
   };
 
-  // Fetch all chunks immediately so sentence transitions do not wait on the network.
-  const pending = chunks.map((chunk) => requestChunk(chunk, o));
-
   void (async () => {
     try {
-      for (let i = 0; i < pending.length && !stopped; i++) {
+      for (let i = 0; i < prepared.length && !stopped; i++) {
+        currentIndex = i;
         await waitUntilResumed();
         if (stopped) break;
-        const blob = await pending[i];
-        if (!blob) throw new Error("Sahara voice unavailable");
-        // Pause may have been pressed while this chunk was downloading.
+        const item = await prepared[i];
+        if (!item) throw new Error("Sahara voice unavailable");
+        preparedUrls.add(item.url);
+        currentAudio = item.audio;
         await waitUntilResumed();
         if (stopped) break;
-
-        const url = URL.createObjectURL(blob);
-        urls.add(url);
-        const audio = new Audio(url);
-        currentAudio = audio;
-        audio.preload = "auto";
-        audio.playbackRate = 1.04;
-        audio.addEventListener("playing", markStarted, { once: true });
-        await audio.play();
-        if (paused) audio.pause();
+        item.audio.addEventListener("playing", markStarted, { once: true });
+        await item.audio.play();
+        if (paused) item.audio.pause();
         await new Promise<void>((resolve, reject) => {
-          audio.addEventListener("ended", () => resolve(), { once: true });
-          audio.addEventListener("error", () => reject(new Error("Audio playback failed.")), { once: true });
+          item.audio.addEventListener("ended", () => resolve(), { once: true });
+          item.audio.addEventListener("error", () => reject(new Error("Audio playback failed.")), { once: true });
         });
         currentAudio = null;
-        URL.revokeObjectURL(url);
-        urls.delete(url);
       }
     } catch {
       if (!stopped) {
@@ -228,8 +243,19 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       if (stopped || settled || !paused) return;
       paused = false;
       fallbackHandle?.resume();
-      if (currentAudio) void currentAudio.play().catch(() => undefined);
+      // If we are paused in the middle of audio, this continues from the exact
+      // currentTime immediately in the user's click gesture.
+      if (currentAudio?.paused) void currentAudio.play().catch(() => undefined);
       for (const release of resumeWaiters.splice(0)) release();
+      // If pause happened exactly between chunks, eagerly kick the already-prepared
+      // next player as soon as it resolves rather than waiting for another UI event.
+      if (!currentAudio && currentIndex >= 0 && currentIndex + 1 < prepared.length) {
+        void prepared[currentIndex + 1].then((next) => {
+          if (!next || stopped || paused || currentAudio) return;
+          next.audio.play().then(() => next.audio.pause()).catch(() => undefined);
+          next.audio.currentTime = 0;
+        });
+      }
     },
     isPaused: () => paused,
     started,
