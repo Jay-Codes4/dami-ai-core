@@ -18,6 +18,7 @@ export interface SpeechHandle {
   pause(): void;
   resume(): void;
   isPaused(): boolean;
+  started: Promise<void>;
   ended: Promise<void>;
 }
 
