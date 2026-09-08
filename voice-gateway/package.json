@@ -1,0 +1,8 @@
+{
+  "name": "dami-voice-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "start": "node server.cjs" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "ws": "^8.18.3" }
+}
