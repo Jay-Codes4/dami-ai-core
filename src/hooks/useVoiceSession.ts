@@ -4,7 +4,7 @@
  *   welcome → idle → listening → transcribing → researching → answered → speaking
  *
  * Voice capture uses an adaptive silence detector so users can speak naturally
- * without pressing Done Speaking. After real speech has started, roughly 2.5
+ * without pressing Done Speaking. After real speech has started, roughly 2
  * seconds of sustained quiet is treated as the end of the turn and submitted
  * automatically for transcription.
  */
@@ -48,15 +48,12 @@ export const STAGE_LABEL: Record<VoiceStage, string> = {
   error: "Something went wrong.",
 };
 
-// End-of-turn detection. Mobile microphones often report a non-zero noise floor,
-// so a fixed threshold alone is unreliable. We learn the room's baseline while
-// the mic settles, then require speech to rise clearly above that baseline.
-const END_OF_SPEECH_SILENCE_MS = 2500;
-const LISTENING_GRACE_MS = 800;
-const SPEECH_CONFIRM_MS = 180;
-const MIN_SPEECH_THRESHOLD = 0.035;
-const NOISE_MULTIPLIER = 2.2;
-const NOISE_MARGIN = 0.018;
+const END_OF_SPEECH_SILENCE_MS = 2000;
+const LISTENING_GRACE_MS = 650;
+const SPEECH_CONFIRM_MS = 160;
+const MIN_SPEECH_THRESHOLD = 0.032;
+const NOISE_MULTIPLIER = 2.0;
+const NOISE_MARGIN = 0.016;
 
 export function useVoiceSession() {
   const [stage, setStage] = useState<VoiceStage>("welcome");
@@ -253,16 +250,15 @@ export function useVoiceSession() {
         const currentLevel = currentRecorder.level();
         setLevel(currentLevel);
 
-        // Learn the ambient level while the microphone settles. This makes the
-        // detector work much better on phones, fans, AC, and ordinary rooms.
         if (now - startedAt < LISTENING_GRACE_MS) {
-          noiseFloor = noiseFloor * 0.8 + currentLevel * 0.2;
+          noiseFloor = Math.min(0.035, noiseFloor * 0.8 + currentLevel * 0.2);
+          if (currentLevel >= 0.08) speechDetected = true;
           return;
         }
 
         const speechThreshold = Math.max(
           MIN_SPEECH_THRESHOLD,
-          noiseFloor * NOISE_MULTIPLIER + NOISE_MARGIN,
+          Math.min(0.12, noiseFloor * NOISE_MULTIPLIER + NOISE_MARGIN),
         );
         const quietThreshold = Math.max(MIN_SPEECH_THRESHOLD * 0.8, speechThreshold * 0.72);
 
@@ -275,14 +271,11 @@ export function useVoiceSession() {
 
         speechStartedAt = null;
 
-        // Before speech begins, keep adapting slowly to the room rather than
-        // accidentally treating background noise as a completed voice turn.
         if (!speechDetected) {
-          noiseFloor = noiseFloor * 0.96 + currentLevel * 0.04;
+          noiseFloor = Math.min(0.035, noiseFloor * 0.96 + currentLevel * 0.04);
           return;
         }
 
-        // Once the user has spoken, only sustained quiet ends the turn.
         if (currentLevel <= quietThreshold) {
           if (silenceStartedAt === null) silenceStartedAt = now;
           if (now - silenceStartedAt >= END_OF_SPEECH_SILENCE_MS) {
@@ -306,8 +299,6 @@ export function useVoiceSession() {
     }
   }, [processRecording, stopLevelMeter]);
 
-  // Manual stop remains only as a fallback. Normal voice turns submit themselves
-  // after sustained silence, so users should not need to press Done Speaking.
   const stopListening = useCallback(async () => {
     const recorder = recorderRef.current;
     if (!recorder || autoStoppingRef.current) return;
