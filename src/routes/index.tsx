@@ -1,113 +1,19 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { ArrowRight, Download, Globe2, Mic, ScrollText, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
-
 import { AppShell } from "@/components/AppShell";
 import { DamiAvatar } from "@/components/DamiAvatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STORAGE_EVENT, storage } from "@/lib/storage";
 import type { ResearchSession } from "@/lib/types";
-
-const WINDOWS_DOWNLOAD =
-  "https://github.com/Jay-Codes4/dami-ai-core/releases/latest/download/Dami-Setup.exe";
-
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Dami AI — A Voice for Justice across Africa" },
-      {
-        name: "description",
-        content:
-          "Dami is an African legal AI agent for legal research, legal information and source-grounded assistance across jurisdictions and legal practice workflows.",
-      },
-      { property: "og:title", content: "Dami AI — A Voice for Justice across Africa" },
-      {
-        property: "og:description",
-        content:
-          "Voice-first African legal intelligence with multilingual speech, source-grounded research and practitioner-focused assistance.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: Home,
-});
-
-function useSessions() {
-  const [sessions, setSessions] = useState<ResearchSession[]>([]);
-  useEffect(() => {
-    const load = () => setSessions(storage.listSessions());
-    load();
-    window.addEventListener(STORAGE_EVENT, load);
-    return () => window.removeEventListener(STORAGE_EVENT, load);
-  }, []);
-  return sessions;
-}
-
-function Home() {
-  const sessions = useSessions().slice(0, 3);
-
-  return (
-    <AppShell>
-      <section className="flex flex-col items-center gap-8 py-6 text-center">
-        <DamiAvatar state="welcome" size={240} />
-        <div className="space-y-4">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">A Voice for Justice</p>
-          <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">African legal intelligence you can talk to</h1>
-          <p className="mx-auto max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground">
-            Dami listens naturally, understands the jurisdiction and legal task you are asking about,
-            researches available authorities, and returns a useful answer with sources you can verify.
-            It is built for lawyers, legal researchers, students, public-service teams and people who
-            need clearer access to legal information.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Button asChild size="lg" className="shadow-[var(--shadow-lift)]"><Link to="/ask"><Mic className="mr-2 h-5 w-5" /> Talk with Dami</Link></Button>
-          <Button asChild size="lg" variant="outline"><Link to="/research"><Globe2 className="mr-2 h-5 w-5" /> Research with Dami</Link></Button>
-        </div>
-      </section>
-
-      <section className="mt-12 rounded-3xl border border-primary/20 bg-primary/5 p-6 md:flex md:items-center md:justify-between md:gap-8 md:p-8">
-        <div className="max-w-2xl">
-          <p className="text-sm font-semibold text-primary">Want an interactive Dami on your PC?</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">Install Dami Desktop</h2>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Keep Dami floating on your desktop and say “Hey Dami” when you need help. She wakes, listens to your question and brings the legal answer back without making you open the browser first.
-          </p>
-        </div>
-        <div className="mt-5 flex shrink-0 flex-wrap gap-2 md:mt-0">
-          <Button asChild size="lg"><a href={WINDOWS_DOWNLOAD}><Download className="mr-2 h-5 w-5" /> Install for Windows</a></Button>
-          <Button asChild size="lg" variant="outline"><Link to="/desktop">Learn more</Link></Button>
-        </div>
-      </section>
-
-      <section className="mt-14 grid gap-4 md:grid-cols-3">
-        {[
-          { icon: Mic, title: "Speak naturally", body: "Use an African-accented voice or switch between the launch languages. Dami listens, follows the conversation and can speak the answer back." },
-          { icon: ScrollText, title: "Research that earns trust", body: "Dami prioritizes authoritative legal sources, explains why they matter and shows the authorities behind the answer instead of returning generic search snippets." },
-          { icon: ShieldCheck, title: "Useful, not overconfident", body: "Dami separates verified law from uncertainty, identifies jurisdiction limits and tells you when stronger authority or qualified legal advice is needed." },
-        ].map(({ icon: Icon, title, body }) => (
-          <Card key={title} className="shadow-[var(--shadow-soft)]">
-            <CardHeader className="space-y-2"><Icon className="h-5 w-5 text-primary" /><CardTitle className="text-base">{title}</CardTitle></CardHeader>
-            <CardContent className="text-sm leading-relaxed text-muted-foreground">{body}</CardContent>
-          </Card>
-        ))}
-      </section>
-
-      {sessions.length > 0 && (
-        <section className="mt-14 space-y-4">
-          <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Recent research</h2><Link to="/research" className="text-sm text-primary hover:underline">View all</Link></div>
-          <div className="grid gap-4 md:grid-cols-3">
-            {sessions.map((session) => (
-              <Card key={session.id} className="shadow-[var(--shadow-soft)]">
-                <CardHeader><CardTitle className="text-sm leading-snug">{session.question}</CardTitle></CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground"><p className="line-clamp-3">{session.answer.answer}</p><Link to="/research" className="inline-flex items-center gap-1 text-primary hover:underline">Open <ArrowRight className="h-3.5 w-3.5" /></Link></CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-      )}
-    </AppShell>
-  );
-}
+const WINDOWS_DOWNLOAD="https://github.com/Jay-Codes4/dami-ai-core/releases/latest/download/Dami-Setup.exe";
+export const Route=createFileRoute("/")({head:()=>({meta:[{title:"Dami AI — A Voice for Justice across Africa"},{name:"description",content:"Voice-first African legal intelligence with multilingual speech and source-grounded research."}]}),component:Home});
+function useSessions(){const[sessions,setSessions]=useState<ResearchSession[]>([]);useEffect(()=>{const load=()=>setSessions(storage.listSessions());load();window.addEventListener(STORAGE_EVENT,load);return()=>window.removeEventListener(STORAGE_EVENT,load);},[]);return sessions;}
+function useMobile(){const[mobile,setMobile]=useState(false);useEffect(()=>{const media=window.matchMedia("(max-width: 767px)");const update=()=>setMobile(media.matches||/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));update();media.addEventListener?.("change",update);return()=>media.removeEventListener?.("change",update);},[]);return mobile;}
+function Home(){const sessions=useSessions().slice(0,3),mobile=useMobile();return <AppShell>
+<section className="flex flex-col items-center gap-5 py-3 text-center sm:gap-8 sm:py-6"><DamiAvatar state="welcome" size={mobile?180:240}/><div className="space-y-3 sm:space-y-4"><p className="text-xs font-medium uppercase tracking-[0.2em] text-primary sm:text-sm">A Voice for Justice</p><h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">African legal intelligence you can talk to</h1><p className="mx-auto max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">Dami listens naturally, understands your legal task, researches available authorities and returns a clear answer with sources you can verify.</p></div><div className="grid w-full max-w-sm gap-2 sm:flex sm:max-w-none sm:w-auto sm:items-center sm:justify-center sm:gap-3"><Button asChild size="lg"><Link to="/ask"><Mic className="mr-2 h-5 w-5"/>Talk with Dami</Link></Button><Button asChild size="lg" variant="outline"><Link to="/research"><Globe2 className="mr-2 h-5 w-5"/>Research with Dami</Link></Button></div></section>
+{!mobile&&<section className="mt-12 rounded-3xl border border-primary/20 bg-primary/5 p-6 md:flex md:items-center md:justify-between md:gap-8 md:p-8"><div className="max-w-2xl"><p className="text-sm font-semibold text-primary">Want an interactive Dami on your PC?</p><h2 className="mt-2 text-2xl font-semibold">Install Dami Desktop</h2><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Keep Dami floating on your desktop and say “Hey Dami” when you need help.</p></div><div className="mt-5 flex shrink-0 gap-2 md:mt-0"><Button asChild size="lg"><a href={WINDOWS_DOWNLOAD}><Download className="mr-2 h-5 w-5"/>Install for Windows</a></Button><Button asChild size="lg" variant="outline"><Link to="/desktop">Learn more</Link></Button></div></section>}
+<section className="mt-9 grid gap-3 sm:mt-14 md:grid-cols-3">{[{icon:Mic,title:"Speak naturally",body:"Use your voice or switch between supported launch languages. Dami can speak the answer back."},{icon:ScrollText,title:"Research that earns trust",body:"Dami prioritizes useful legal sources and shows the authorities behind the answer."},{icon:ShieldCheck,title:"Useful, not overconfident",body:"Dami identifies jurisdiction limits and separates verified law from uncertainty."}].map(({icon:Icon,title,body})=><Card key={title}><CardHeader className="space-y-2 pb-2"><Icon className="h-5 w-5 text-primary"/><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent className="text-sm leading-relaxed text-muted-foreground">{body}</CardContent></Card>)}</section>
+{sessions.length>0&&<section className="mt-10 space-y-4 sm:mt-14"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Recent research</h2><Link to="/research" className="text-sm text-primary">View all</Link></div><div className="grid gap-3 md:grid-cols-3">{sessions.map(session=><Card key={session.id}><CardHeader><CardTitle className="text-sm">{session.question}</CardTitle></CardHeader><CardContent className="space-y-3 text-sm text-muted-foreground"><p className="line-clamp-3">{session.answer.answer}</p><Link to="/research" className="inline-flex items-center gap-1 text-primary">Open <ArrowRight className="h-3.5 w-3.5"/></Link></CardContent></Card>)}</div></section>}
+</AppShell>}
