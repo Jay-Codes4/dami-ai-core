@@ -31,7 +31,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
-      "allowToChangeInstallationDirectory": true,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
       "shortcutName": "Dami",
@@ -39,7 +39,8 @@
       "language": "1033",
       "installerLanguages": ["en_US"],
       "displayLanguageSelector": false,
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     }
   },
   "overrides": { "rolldown": "1.2.1" },
@@ -111,7 +112,7 @@
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
-    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
