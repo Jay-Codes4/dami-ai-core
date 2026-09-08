@@ -8,32 +8,44 @@ export const Route = createFileRoute("/companion")({ component: Companion });
 type RecognitionEvent = { results: ArrayLike<{ 0: { transcript: string } }> };
 type Recognition = { continuous:boolean; interimResults:boolean; lang:string; start():void; stop():void; abort():void; onresult:((e:RecognitionEvent)=>void)|null; onend:(()=>void)|null; onerror:(()=>void)|null };
 type RecognitionCtor = new () => Recognition;
-type DesktopBridge = { isDesktop?:boolean; onWakeWord?: (callback:()=>void)=>void|(()=>void) };
+type WakeStatus = "starting"|"ready"|"error"|"unsupported"|"disabled"|"stopped";
+type DesktopBridge = {
+  isDesktop?:boolean;
+  onWakeWord?: (callback:()=>void)=>void|(()=>void);
+  getWakeStatus?: ()=>Promise<WakeStatus>;
+  onWakeStatus?: (callback:(status:WakeStatus)=>void)=>void|(()=>void);
+};
 
 function Companion() {
   const { readAloud, startListening, robotState, level, stage, statusText } = useVoiceSession();
   const recognitionRef = useRef<Recognition|null>(null); const stageRef = useRef(stage); const activatingRef = useRef(false);
   const [wakeAvailable,setWakeAvailable]=useState(true); const [wakeActive,setWakeActive]=useState(false);
+  const [nativeWakeStatus,setNativeWakeStatus]=useState<WakeStatus>("starting");
   useEffect(()=>{stageRef.current=stage;},[stage]);
 
   const activate=useCallback(async()=>{
     if(activatingRef.current || !["idle","answered","error"].includes(stageRef.current)) return;
-    activatingRef.current=true; recognitionRef.current?.stop(); setWakeActive(false);
+    activatingRef.current=true; recognitionRef.current?.stop();
     try { await readAloud("How can I help you today?"); await startListening(); }
     finally { activatingRef.current=false; }
   },[readAloud,startListening]);
 
   useEffect(()=>{
     const bridge=(window as typeof window & {damiDesktop?:DesktopBridge}).damiDesktop;
-    if(!bridge?.isDesktop || !bridge.onWakeWord || !storage.getSettings().wakeWordEnabled) return;
-    setWakeAvailable(true); setWakeActive(true);
-    const cleanup=bridge.onWakeWord(()=>void activate());
-    return typeof cleanup === "function" ? cleanup : undefined;
+    if(!bridge?.isDesktop) return;
+    if(!storage.getSettings().wakeWordEnabled){setWakeAvailable(false);setWakeActive(false);setNativeWakeStatus("disabled");return;}
+
+    let wakeCleanup:void|(()=>void); let statusCleanup:void|(()=>void); let cancelled=false;
+    setWakeAvailable(true);
+    if(bridge.onWakeWord) wakeCleanup=bridge.onWakeWord(()=>void activate());
+    if(bridge.onWakeStatus) statusCleanup=bridge.onWakeStatus((status)=>{setNativeWakeStatus(status);setWakeActive(status==="ready");setWakeAvailable(!["error","unsupported","stopped"].includes(status));});
+    if(bridge.getWakeStatus) void bridge.getWakeStatus().then((status)=>{if(cancelled)return;setNativeWakeStatus(status);setWakeActive(status==="ready");setWakeAvailable(!["error","unsupported","stopped"].includes(status));}).catch(()=>{if(!cancelled){setNativeWakeStatus("error");setWakeActive(false);setWakeAvailable(false);}});
+    return()=>{cancelled=true;if(typeof wakeCleanup==="function")wakeCleanup();if(typeof statusCleanup==="function")statusCleanup();};
   },[activate]);
 
   useEffect(()=>{
     const bridge=(window as typeof window & {damiDesktop?:DesktopBridge}).damiDesktop;
-    if(bridge?.isDesktop) return; // Installed Dami uses the native OS wake listener.
+    if(bridge?.isDesktop) return;
     const settings=storage.getSettings(); if(!settings.wakeWordEnabled){setWakeActive(false);return;}
     const sw=window as typeof window & {SpeechRecognition?:RecognitionCtor;webkitSpeechRecognition?:RecognitionCtor};
     const Ctor=sw.SpeechRecognition??sw.webkitSpeechRecognition; if(!Ctor){setWakeAvailable(false);return;}
@@ -45,8 +57,12 @@ function Companion() {
     return()=>{recognition.onend=null;recognition.abort();if(recognitionRef.current===recognition)recognitionRef.current=null;};
   },[activate]);
 
+  const bridge=(window as typeof window & {damiDesktop?:DesktopBridge}).damiDesktop;
+  const desktopIdleText = nativeWakeStatus==="starting" ? "Starting Hey Dami…" : nativeWakeStatus==="ready" ? 'Say "Hey Dami"' : nativeWakeStatus==="disabled" ? "Wake word is off — click Dami" : "Hey Dami unavailable — click Dami";
+  const idleText = bridge?.isDesktop ? desktopIdleText : wakeAvailable ? (wakeActive?'Say "Hey Dami"':"Wake listener unavailable — click Dami") : "Click Dami to talk";
+
   return <main className="flex min-h-screen select-none flex-col items-center justify-end bg-transparent p-2 text-center">
     <button type="button" onClick={()=>void activate()} className="rounded-full bg-transparent p-0 outline-none transition-transform hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-primary" aria-label="Talk with Dami"><DamiAvatar state={robotState} level={level} size={205}/></button>
-    <div className="-mt-2 rounded-full border border-border/70 bg-background/90 px-4 py-2 shadow-lg backdrop-blur"><p className="text-sm font-semibold">Dami</p><p className="max-w-[230px] truncate text-[11px] text-muted-foreground">{stage==="idle"&&wakeAvailable?(wakeActive?'Say "Hey Dami"':"Wake listener unavailable — click Dami"):statusText}</p></div>
+    <div className="-mt-2 rounded-full border border-border/70 bg-background/90 px-4 py-2 shadow-lg backdrop-blur"><p className="text-sm font-semibold">Dami</p><p className="max-w-[230px] truncate text-[11px] text-muted-foreground">{stage==="idle"?idleText:statusText}</p></div>
   </main>;
 }
