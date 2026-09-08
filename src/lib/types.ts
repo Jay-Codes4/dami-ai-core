@@ -160,7 +160,7 @@ export interface DamiSettings {
 export const DEFAULT_SETTINGS: DamiSettings = {
   theme: "system",
   speechLanguage: "en",
-  voiceAccent: "yoruba",
+  voiceAccent: "twi",
   voiceGender: "female",
   speakAnswers: true,
   maxRecordingSeconds: 120,
