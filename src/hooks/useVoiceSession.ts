@@ -171,7 +171,9 @@ export function useVoiceSession() {
         storage.saveSession(record);
         setSession(record);
 
-        if (storage.getSettings().speakAnswers && !result.insufficientEvidence) {
+        // Voice is a core part of Dami, so evidence warnings no longer suppress
+        // playback. Dami speaks the answer and its caveat instead of going silent.
+        if (storage.getSettings().speakAnswers) {
           await readAloud(result.answer);
         }
       } catch (err) {
