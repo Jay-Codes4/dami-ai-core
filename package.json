@@ -1,7 +1,7 @@
 {
   "name": "dami-ai-core",
   "version": "0.1.0",
-  "description": "Dami AI — a voice-first African legal assistant",
+  "description": "Dami AI, a voice-first African legal assistant",
   "author": "Dami AI",
   "private": true,
   "sideEffects": false,
@@ -21,33 +21,28 @@
     "appId": "ai.dami.desktop",
     "productName": "Dami",
     "asar": true,
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "desktop/**/*",
-      "package.json"
-    ],
+    "directories": { "output": "release" },
+    "files": ["desktop/**/*", "package.json"],
     "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
-      ],
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
       "artifactName": "Dami-Setup.exe"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
+      "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "shortcutName": "Dami"
+      "shortcutName": "Dami",
+      "runAfterFinish": true,
+      "language": "1033",
+      "installerLanguages": ["en_US"],
+      "displayLanguageSelector": false,
+      "deleteAppDataOnUninstall": false
     }
   },
-  "overrides": {
-    "rolldown": "1.2.1"
-  },
+  "overrides": { "rolldown": "1.2.1" },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -116,7 +111,7 @@
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
-    "eslint-plugin-react-hooks": "^6.1.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
