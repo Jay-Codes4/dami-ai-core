@@ -12,9 +12,11 @@ interface DamiAvatarProps {
   level?: number;
 }
 
-type MotionBeat = "rest" | "tilt-left" | "tilt-right" | "lift" | "hello";
+type MotionBeat = "rest" | "peek-left" | "peek-right" | "lift" | "curious" | "hello";
 
-const IDLE_BEATS: MotionBeat[] = ["rest", "tilt-left", "rest", "tilt-right", "lift", "rest"];
+// Whole-character beats inspired by the supplied EVE/Dami video references.
+// We never split, warp or independently transform body parts.
+const IDLE_BEATS: MotionBeat[] = ["rest", "curious", "rest", "peek-left", "rest", "lift", "rest", "peek-right"];
 
 export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }: DamiAvatarProps) {
   const halo = state === "listening" ? 1 + Math.min(level, 1) * 0.25 : 1;
@@ -35,7 +37,7 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
     const timer = window.setInterval(() => {
       index = (index + 1) % IDLE_BEATS.length;
       setMotionBeat(IDLE_BEATS[index]);
-    }, 3600);
+    }, 3200);
     return () => window.clearInterval(timer);
   }, [state]);
 
