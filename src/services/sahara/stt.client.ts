@@ -1,7 +1,7 @@
 /**
  * Browser side of the speech pipeline.
  * Captures microphone audio, converts it to 16 kHz mono PCM16 and sends it to
- * Dami's server route. Credentials remain server-side.
+ * Dami's production speech endpoint. Credentials remain server-side.
  */
 
 export const TARGET_SAMPLE_RATE = 16000;
@@ -135,7 +135,7 @@ export interface TranscriptionResult { text: string; durationMs: number; request
 export async function transcribeSamples(samples: Float32Array, options: { language: string; codeSwitching: boolean }): Promise<TranscriptionResult> {
   let response: Response;
   try {
-    response = await fetch("/api/sahara/stt", {
+    response = await fetch("/api/sahara-stt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
