@@ -3,9 +3,10 @@
  *
  *   welcome → idle → listening → transcribing → researching → answered → speaking
  *
- * Voice capture uses a lightweight silence detector so users can speak
- * naturally without pressing Stop. After speech has started, about two seconds
- * of sustained silence is treated as the end of the turn.
+ * Voice capture uses an adaptive silence detector so users can speak naturally
+ * without pressing Done Speaking. After real speech has started, roughly 2.5
+ * seconds of sustained quiet is treated as the end of the turn and submitted
+ * automatically for transcription.
  */
 
 import { useServerFn } from "@tanstack/react-start";
@@ -39,20 +40,23 @@ export const STAGE_LABEL: Record<VoiceStage, string> = {
   welcome: "Hi — I'm Dami. Talk to me when you're ready.",
   idle: "Ready when you are.",
   "requesting-permission": "Waiting for microphone permission…",
-  listening: "I'm listening… I'll know when you're done.",
-  transcribing: "I heard you. Turning that into text…",
+  listening: "I'm listening… just speak naturally and I'll know when you're done.",
+  transcribing: "Got it. Turning your voice into text…",
   researching: "I'm checking the law and the strongest available authorities…",
   answered: "I found something useful for you.",
   speaking: "I'm speaking…",
   error: "Something went wrong.",
 };
 
-// recorder.level() is normalised to roughly 0–1. These values deliberately
-// favour natural pauses over aggressive cut-offs. A user can pause briefly in
-// the middle of a sentence without Dami ending the turn.
-const SPEECH_LEVEL_THRESHOLD = 0.055;
-const END_OF_SPEECH_SILENCE_MS = 2000;
-const LISTENING_GRACE_MS = 700;
+// End-of-turn detection. Mobile microphones often report a non-zero noise floor,
+// so a fixed threshold alone is unreliable. We learn the room's baseline while
+// the mic settles, then require speech to rise clearly above that baseline.
+const END_OF_SPEECH_SILENCE_MS = 2500;
+const LISTENING_GRACE_MS = 800;
+const SPEECH_CONFIRM_MS = 180;
+const MIN_SPEECH_THRESHOLD = 0.035;
+const NOISE_MULTIPLIER = 2.2;
+const NOISE_MARGIN = 0.018;
 
 export function useVoiceSession() {
   const [stage, setStage] = useState<VoiceStage>("welcome");
@@ -236,39 +240,58 @@ export function useVoiceSession() {
       setStage("listening");
 
       const startedAt = Date.now();
+      let noiseFloor = 0.01;
       let speechDetected = false;
+      let speechStartedAt: number | null = null;
       let silenceStartedAt: number | null = null;
 
       levelTimer.current = setInterval(() => {
         const currentRecorder = recorderRef.current;
         if (!currentRecorder || autoStoppingRef.current) return;
 
+        const now = Date.now();
         const currentLevel = currentRecorder.level();
         setLevel(currentLevel);
 
-        // Give the microphone a short moment to settle after opening.
-        if (Date.now() - startedAt < LISTENING_GRACE_MS) return;
+        // Learn the ambient level while the microphone settles. This makes the
+        // detector work much better on phones, fans, AC, and ordinary rooms.
+        if (now - startedAt < LISTENING_GRACE_MS) {
+          noiseFloor = noiseFloor * 0.8 + currentLevel * 0.2;
+          return;
+        }
 
-        if (currentLevel >= SPEECH_LEVEL_THRESHOLD) {
-          speechDetected = true;
+        const speechThreshold = Math.max(
+          MIN_SPEECH_THRESHOLD,
+          noiseFloor * NOISE_MULTIPLIER + NOISE_MARGIN,
+        );
+        const quietThreshold = Math.max(MIN_SPEECH_THRESHOLD * 0.8, speechThreshold * 0.72);
+
+        if (currentLevel >= speechThreshold) {
+          if (speechStartedAt === null) speechStartedAt = now;
+          if (now - speechStartedAt >= SPEECH_CONFIRM_MS) speechDetected = true;
           silenceStartedAt = null;
           return;
         }
 
-        // Never auto-stop before we have actually heard speech. This prevents
-        // Dami from closing the microphone while the user is thinking about
-        // what to say.
-        if (!speechDetected) return;
+        speechStartedAt = null;
 
-        if (silenceStartedAt === null) {
-          silenceStartedAt = Date.now();
+        // Before speech begins, keep adapting slowly to the room rather than
+        // accidentally treating background noise as a completed voice turn.
+        if (!speechDetected) {
+          noiseFloor = noiseFloor * 0.96 + currentLevel * 0.04;
           return;
         }
 
-        if (Date.now() - silenceStartedAt >= END_OF_SPEECH_SILENCE_MS) {
-          autoStoppingRef.current = true;
-          recorderRef.current = null;
-          void processRecording(currentRecorder);
+        // Once the user has spoken, only sustained quiet ends the turn.
+        if (currentLevel <= quietThreshold) {
+          if (silenceStartedAt === null) silenceStartedAt = now;
+          if (now - silenceStartedAt >= END_OF_SPEECH_SILENCE_MS) {
+            autoStoppingRef.current = true;
+            recorderRef.current = null;
+            void processRecording(currentRecorder);
+          }
+        } else {
+          silenceStartedAt = null;
         }
       }, 100);
     } catch (err) {
@@ -283,8 +306,8 @@ export function useVoiceSession() {
     }
   }, [processRecording, stopLevelMeter]);
 
-  // Manual stop remains available as a fallback, but normal voice turns now
-  // finish automatically after Dami detects sustained silence.
+  // Manual stop remains only as a fallback. Normal voice turns submit themselves
+  // after sustained silence, so users should not need to press Done Speaking.
   const stopListening = useCallback(async () => {
     const recorder = recorderRef.current;
     if (!recorder || autoStoppingRef.current) return;
