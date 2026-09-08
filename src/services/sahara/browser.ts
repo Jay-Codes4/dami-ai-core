@@ -1,7 +1,14 @@
 import { createClientOnlyFn } from "@tanstack/react-start";
 
+export interface AudioCapture {
+  blob: Blob;
+  mimeType: string;
+  extension: string;
+  durationMs: number;
+}
+
 export interface Recorder {
-  stop(): Promise<Float32Array>;
+  stop(): Promise<AudioCapture>;
   cancel(): void;
   level(): number;
   transcript(): string;
@@ -38,11 +45,11 @@ export const startRecording = createClientOnlyFn(
 
 export const transcribeSamples = createClientOnlyFn(
   async (
-    samples: Float32Array,
+    capture: AudioCapture,
     options: { language: string; codeSwitching: boolean; browserTranscript?: string },
   ): Promise<TranscriptionResult> => {
     const mod = await import("./stt.client");
-    return mod.transcribeSamples(samples, options);
+    return mod.transcribeSamples(capture, options);
   },
 );
 
