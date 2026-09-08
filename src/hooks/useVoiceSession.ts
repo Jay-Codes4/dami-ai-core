@@ -3,9 +3,9 @@
  *
  *   welcome → idle → listening → transcribing → researching → answered → speaking
  *
- * Every failure path resolves to a friendly, Dami-specific message; raw
- * technical errors are logged, never shown. Nothing is ever faked: if a
- * service is unavailable the session reports it and stops.
+ * Voice capture uses a lightweight silence detector so users can speak
+ * naturally without pressing Stop. After speech has started, about two seconds
+ * of sustained silence is treated as the end of the turn.
  */
 
 import { useServerFn } from "@tanstack/react-start";
@@ -39,13 +39,20 @@ export const STAGE_LABEL: Record<VoiceStage, string> = {
   welcome: "Hi — I'm Dami. Talk to me when you're ready.",
   idle: "Ready when you are.",
   "requesting-permission": "Waiting for microphone permission…",
-  listening: "I'm listening…",
+  listening: "I'm listening… I'll know when you're done.",
   transcribing: "I heard you. Turning that into text…",
   researching: "I'm checking the law and the strongest available authorities…",
   answered: "I found something useful for you.",
   speaking: "I'm speaking…",
   error: "Something went wrong.",
 };
+
+// recorder.level() is normalised to roughly 0–1. These values deliberately
+// favour natural pauses over aggressive cut-offs. A user can pause briefly in
+// the middle of a sentence without Dami ending the turn.
+const SPEECH_LEVEL_THRESHOLD = 0.055;
+const END_OF_SPEECH_SILENCE_MS = 2000;
+const LISTENING_GRACE_MS = 700;
 
 export function useVoiceSession() {
   const [stage, setStage] = useState<VoiceStage>("welcome");
@@ -60,6 +67,7 @@ export function useVoiceSession() {
   const speechRef = useRef<SpeechHandle | null>(null);
   const levelTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const cancelled = useRef(false);
+  const autoStoppingRef = useRef(false);
 
   const runResearch = useServerFn(askDami);
 
@@ -88,6 +96,7 @@ export function useVoiceSession() {
 
   const clear = useCallback(() => {
     cancelled.current = true;
+    autoStoppingRef.current = false;
     recorderRef.current?.cancel();
     recorderRef.current = null;
     speechRef.current?.stop();
@@ -178,8 +187,42 @@ export function useVoiceSession() {
     [readAloud, runResearch],
   );
 
+  const processRecording = useCallback(
+    async (recorder: Recorder) => {
+      stopLevelMeter();
+      setStage("transcribing");
+
+      const settings = storage.getSettings();
+      const language = getDamiLanguage(settings.speechLanguage);
+      try {
+        const samples = await recorder.stop();
+        const result = await transcribeSamples(samples, {
+          language: language.code,
+          codeSwitching: language.codeSwitched,
+        });
+        if (cancelled.current) return;
+        setPartial("");
+        setQuestion(result.text);
+        await ask(result.text);
+      } catch (err) {
+        if (cancelled.current) return;
+        console.error(err);
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : "I couldn't turn that recording into text.",
+        );
+        setStage("error");
+      } finally {
+        autoStoppingRef.current = false;
+      }
+    },
+    [ask, stopLevelMeter],
+  );
+
   const startListening = useCallback(async () => {
     cancelled.current = false;
+    autoStoppingRef.current = false;
     setError(null);
     setAnswer(null);
     setPartial("");
@@ -191,7 +234,43 @@ export function useVoiceSession() {
       const recorder = await startRecording(settings.maxRecordingSeconds);
       recorderRef.current = recorder;
       setStage("listening");
-      levelTimer.current = setInterval(() => setLevel(recorder.level()), 100);
+
+      const startedAt = Date.now();
+      let speechDetected = false;
+      let silenceStartedAt: number | null = null;
+
+      levelTimer.current = setInterval(() => {
+        const currentRecorder = recorderRef.current;
+        if (!currentRecorder || autoStoppingRef.current) return;
+
+        const currentLevel = currentRecorder.level();
+        setLevel(currentLevel);
+
+        // Give the microphone a short moment to settle after opening.
+        if (Date.now() - startedAt < LISTENING_GRACE_MS) return;
+
+        if (currentLevel >= SPEECH_LEVEL_THRESHOLD) {
+          speechDetected = true;
+          silenceStartedAt = null;
+          return;
+        }
+
+        // Never auto-stop before we have actually heard speech. This prevents
+        // Dami from closing the microphone while the user is thinking about
+        // what to say.
+        if (!speechDetected) return;
+
+        if (silenceStartedAt === null) {
+          silenceStartedAt = Date.now();
+          return;
+        }
+
+        if (Date.now() - silenceStartedAt >= END_OF_SPEECH_SILENCE_MS) {
+          autoStoppingRef.current = true;
+          recorderRef.current = null;
+          void processRecording(currentRecorder);
+        }
+      }, 100);
     } catch (err) {
       recorderRef.current = null;
       stopLevelMeter();
@@ -202,40 +281,21 @@ export function useVoiceSession() {
       );
       setStage("error");
     }
-  }, [stopLevelMeter]);
+  }, [processRecording, stopLevelMeter]);
 
+  // Manual stop remains available as a fallback, but normal voice turns now
+  // finish automatically after Dami detects sustained silence.
   const stopListening = useCallback(async () => {
     const recorder = recorderRef.current;
-    if (!recorder) return;
+    if (!recorder || autoStoppingRef.current) return;
+    autoStoppingRef.current = true;
     recorderRef.current = null;
-    stopLevelMeter();
-    setStage("transcribing");
-
-    const settings = storage.getSettings();
-    const language = getDamiLanguage(settings.speechLanguage);
-    try {
-      const samples = await recorder.stop();
-      const result = await transcribeSamples(samples, {
-        language: language.code,
-        codeSwitching: language.codeSwitched,
-      });
-      if (cancelled.current) return;
-      setPartial("");
-      setQuestion(result.text);
-      await ask(result.text);
-    } catch (err) {
-      console.error(err);
-      setError(
-        err instanceof Error && err.message
-          ? err.message
-          : "I couldn't turn that recording into text.",
-      );
-      setStage("error");
-    }
-  }, [ask, stopLevelMeter]);
+    await processRecording(recorder);
+  }, [processRecording]);
 
   const cancelListening = useCallback(() => {
     cancelled.current = true;
+    autoStoppingRef.current = false;
     recorderRef.current?.cancel();
     recorderRef.current = null;
     stopLevelMeter();
