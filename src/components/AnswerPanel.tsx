@@ -17,6 +17,10 @@ interface AnswerPanelProps {
   onStopSpeaking?: () => void;
 }
 
+function simpleText(text: string | null | undefined) {
+  return (text ?? "").replace(/[—–]/g, ",");
+}
+
 export function AnswerPanel({
   question,
   answer,
@@ -40,19 +44,21 @@ export function AnswerPanel({
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Your question
           </p>
-          <CardTitle className="text-lg leading-snug">{question}</CardTitle>
+          <CardTitle className="text-lg leading-snug">{simpleText(question)}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           {answer.insufficientEvidence ? (
             <Alert>
-              <AlertTitle>Dami doesn't have enough authority for this</AlertTitle>
+              <AlertTitle>Dami needs stronger sources for this</AlertTitle>
               <AlertDescription>
-                {answer.limitations ||
-                  "Nothing in Dami's verified Ghanaian sources answers this question. Please speak to a qualified lawyer."}
+                {simpleText(
+                  answer.limitations ||
+                    "Dami does not have enough reliable authority to answer this safely. Try adding the country or jurisdiction, or check with a qualified lawyer.",
+                )}
               </AlertDescription>
             </Alert>
           ) : (
-            <p className="whitespace-pre-wrap text-[0.975rem] leading-relaxed">{answer.answer}</p>
+            <p className="whitespace-pre-wrap text-[0.975rem] leading-relaxed">{simpleText(answer.answer)}</p>
           )}
 
           {answer.keyFindings.length > 0 && (
@@ -60,7 +66,7 @@ export function AnswerPanel({
               <h3 className="text-sm font-semibold">Key findings</h3>
               <ul className="list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
                 {answer.keyFindings.map((finding) => (
-                  <li key={finding}>{finding}</li>
+                  <li key={finding}>{simpleText(finding)}</li>
                 ))}
               </ul>
             </div>
@@ -68,7 +74,7 @@ export function AnswerPanel({
 
           {!answer.insufficientEvidence && answer.limitations ? (
             <p className="rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
-              {answer.limitations}
+              {simpleText(answer.limitations)}
             </p>
           ) : null}
 
