@@ -24,6 +24,10 @@ export const prepareAudioPlayback = createClientOnlyFn(async (): Promise<void> =
 
 export const startRecording = createClientOnlyFn(
   async (maxSeconds: number): Promise<Recorder> => {
+    // This runs directly from the user's Talk with Dami click. Unlock WebAudio
+    // here so the female Sahara response can play after STT + research finish.
+    const tts = await import("./tts.client");
+    await tts.prepareAudioPlayback().catch(() => undefined);
     const mod = await import("./stt.client");
     return mod.startRecording(maxSeconds);
   },
