@@ -13,8 +13,7 @@ interface DamiAvatarProps {
 }
 
 type MotionBeat = "rest" | "peek-left" | "peek-right" | "lift" | "curious" | "hello";
-
-const IDLE_BEATS: MotionBeat[] = ["rest", "curious", "rest", "peek-left", "rest", "lift", "rest", "peek-right"];
+const IDLE_BEATS: MotionBeat[] = ["rest", "curious", "peek-left", "rest", "lift", "peek-right"];
 
 export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }: DamiAvatarProps) {
   const halo = state === "listening" ? 1 + Math.min(level, 1) * 0.25 : 1;
@@ -35,7 +34,7 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
     const timer = window.setInterval(() => {
       index = (index + 1) % IDLE_BEATS.length;
       setMotionBeat(IDLE_BEATS[index]);
-    }, 3200);
+    }, 1800);
     return () => window.clearInterval(timer);
   }, [state]);
 
@@ -58,14 +57,16 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
         className="dami-halo absolute inset-0 rounded-full bg-primary/10"
         style={{ transform: `scale(${halo})` }}
       />
-      <img
-        src={robot}
-        alt={`Dami, the African legal AI agent — ${state}`}
-        width={size}
-        height={size}
-        className="dami-character relative z-10 h-full w-full object-contain"
-        draggable={false}
-      />
+      <div className="dami-motion-shell relative z-10 h-full w-full">
+        <img
+          src={robot}
+          alt={`Dami, the African legal AI agent — ${state}`}
+          width={size}
+          height={size}
+          className="dami-character h-full w-full object-contain"
+          draggable={false}
+        />
+      </div>
     </div>
   );
 }
