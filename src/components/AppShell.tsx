@@ -21,12 +21,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <Link to="/" className="text-lg font-semibold tracking-tight">
+        <div className="mx-auto grid max-w-6xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
+          <Link to="/" className="whitespace-nowrap text-lg font-semibold tracking-tight">
             Dami<span className="text-primary"> AI</span>
           </Link>
-          <nav className="flex flex-wrap items-center gap-1 text-sm">
-            {NAV.slice(1).map((item) => (
+          <nav className="flex min-w-0 flex-wrap items-center justify-center gap-1 text-sm" aria-label="Main navigation">
+            {NAV.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
@@ -39,7 +39,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Button
             variant="ghost"
             size="icon"
-            className="ml-auto"
             onClick={toggle}
             aria-label="Switch between light and dark mode"
           >
