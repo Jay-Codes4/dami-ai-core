@@ -1,11 +1,10 @@
 /**
  * Intron Sahara integration — SERVER ONLY.
  *
- * The Sahara credential never leaves the server. For the deadline build we use
- * Sahara's synchronous file STT and TTS generate endpoints. This avoids
- * exposing credentials in browser WebSockets and runs cleanly in Vercel's
- * Node/server-function environment. The client can still present a streaming-
- * style voice UX while the server owns the authenticated request.
+ * Sahara credentials never leave the server. Speech-to-text uses Sahara's
+ * synchronous file endpoint. Text-to-speech generation remains available as a
+ * non-streaming fallback while the live voice path uses the server-side
+ * WebSocket bridge.
  */
 
 export const SAHARA_STT_SYNC_URL =
@@ -54,10 +53,9 @@ export interface SttResult {
 }
 
 function decodeBase64(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+  // Buffer is more dependable than atob in Node/serverless runtimes and avoids
+  // creating a very large intermediate JavaScript string for longer turns.
+  return new Uint8Array(Buffer.from(value, "base64"));
 }
 
 function pcm16ToWav(pcm: Uint8Array, sampleRate: number): Uint8Array {
@@ -87,18 +85,28 @@ function pcm16ToWav(pcm: Uint8Array, sampleRate: number): Uint8Array {
   return wav;
 }
 
-/** Transcribe one browser recording with Sahara's documented synchronous STT endpoint. */
-export async function transcribe(request: SttRequest): Promise<SttResult> {
-  const started = Date.now();
-  const key = getSaharaKey();
-  const pcm = decodeBase64(request.audioBase64);
-  const wav = pcm16ToWav(pcm, request.sampleRate);
+type SaharaSttPayload = {
+  data?: {
+    file_id?: string;
+    audio_transcript?: string;
+    transcript?: string;
+  };
+  message?: string;
+  error?: string;
+  detail?: string;
+};
 
+async function sendSttRequest(
+  wav: Uint8Array,
+  language: string,
+  key: string,
+): Promise<{ response: Response; payload: SaharaSttPayload | null; raw: string }> {
+  const fileName = `dami-${Date.now()}.wav`;
   const form = new FormData();
-  form.set("audio_file_name", `dami-${Date.now()}.wav`);
-  form.set("audio_file_blob", new Blob([wav], { type: "audio/wav" }), `dami-${Date.now()}.wav`);
+  form.set("audio_file_name", fileName);
+  form.set("audio_file_blob", new Blob([wav], { type: "audio/wav" }), fileName);
   form.set("use_category", "file_category_legal");
-  form.set("use_language_asr_input", request.language || "en");
+  form.set("use_language_asr_input", language || "en");
   form.set("use_disable_llm_corrections", "FALSE");
 
   const response = await fetch(SAHARA_STT_SYNC_URL, {
@@ -107,26 +115,56 @@ export async function transcribe(request: SttRequest): Promise<SttResult> {
     body: form,
   });
 
-  const payload = (await response.json().catch(() => null)) as
-    | {
-        data?: {
-          file_id?: string;
-          audio_transcript?: string;
-          transcript?: string;
-        };
-        message?: string;
-      }
-    | null;
+  const raw = await response.text();
+  let payload: SaharaSttPayload | null = null;
+  try {
+    payload = raw ? (JSON.parse(raw) as SaharaSttPayload) : null;
+  } catch {
+    payload = null;
+  }
+  return { response, payload, raw };
+}
 
-  if (!response.ok) {
-    const message = payload?.message ?? "Sahara could not transcribe that recording.";
+/** Transcribe one browser recording with Sahara's documented synchronous STT endpoint. */
+export async function transcribe(request: SttRequest): Promise<SttResult> {
+  const started = Date.now();
+  const key = getSaharaKey();
+  const pcm = decodeBase64(request.audioBase64);
+  if (pcm.byteLength < 3200) {
+    throw new SaharaRequestError("Dami didn't receive enough audio to transcribe. Please try speaking again.");
+  }
+  const wav = pcm16ToWav(pcm, request.sampleRate);
+
+  let attempt = await sendSttRequest(wav, request.language || "en", key);
+
+  // Some code-switched launch labels are broader than Sahara's file-ASR input
+  // codes. If Sahara rejects a non-English language code, retry the exact same
+  // audio as English instead of losing the user's turn completely.
+  if (!attempt.response.ok && request.language && request.language !== "en" && attempt.response.status === 400) {
+    attempt = await sendSttRequest(wav, "en", key);
+  }
+
+  if (!attempt.response.ok) {
+    console.error("Sahara STT upstream rejected recording", {
+      status: attempt.response.status,
+      message: attempt.payload?.message ?? attempt.payload?.error ?? attempt.payload?.detail ?? attempt.raw.slice(0, 300),
+    });
+    const message =
+      attempt.payload?.message ??
+      attempt.payload?.error ??
+      attempt.payload?.detail ??
+      (attempt.response.status === 401 || attempt.response.status === 403
+        ? "Sahara couldn't authenticate the speech request. Check the production INTRON_API_KEY."
+        : attempt.response.status === 429
+          ? "Sahara is receiving too many speech requests right now. Please try again in a moment."
+          : `Sahara could not transcribe that recording (HTTP ${attempt.response.status}).`);
     throw new SaharaRequestError(message);
   }
 
-  const text = payload?.data?.audio_transcript ?? payload?.data?.transcript ?? "";
+  const text = attempt.payload?.data?.audio_transcript ?? attempt.payload?.data?.transcript ?? "";
   return {
     text: text.trim(),
-    requestId: payload?.data?.file_id ?? null,
+    requestId: attempt.payload?.data?.file_id ?? null,
     durationMs: Date.now() - started,
   };
 }
