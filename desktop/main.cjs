@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, shell, session, Tray, Menu } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -8,6 +8,8 @@ const EDGE_GAP = 18;
 const DEFAULT_WEB_URL = "https://dami-ai-core.vercel.app";
 
 let win = null;
+let tray = null;
+let isQuitting = false;
 
 function settingsPath() {
   return path.join(app.getPath("userData"), "desktop-settings.json");
@@ -42,6 +44,60 @@ function dockWindow(position) {
 function syncLoginItem(settings) {
   if (process.platform === "win32" || process.platform === "darwin") {
     app.setLoginItemSettings({ openAtLogin: settings.launchAtStartup !== false });
+  }
+}
+
+function isTrustedAppUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return true;
+    const configured = new URL(readSettings().webUrl || DEFAULT_WEB_URL);
+    return url.origin === configured.origin;
+  } catch {
+    return false;
+  }
+}
+
+function configurePermissions() {
+  const ses = session.defaultSession;
+  ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+    if (permission !== "media") return false;
+    return isTrustedAppUrl(requestingOrigin);
+  });
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (permission !== "media") return callback(false);
+    const requestUrl = details?.requestingUrl || webContents.getURL();
+    callback(isTrustedAppUrl(requestUrl));
+  });
+}
+
+async function createTray() {
+  if (tray) return;
+  try {
+    const icon = await app.getFileIcon(process.execPath, { size: "small" });
+    tray = new Tray(icon);
+    tray.setToolTip("Dami");
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: "Show Dami", click: () => { win?.show(); win?.focus(); } },
+        { label: "Hide Dami", click: () => win?.hide() },
+        { type: "separator" },
+        {
+          label: "Quit Dami",
+          click: () => {
+            isQuitting = true;
+            app.quit();
+          },
+        },
+      ]),
+    );
+    tray.on("click", () => {
+      if (!win) return;
+      if (win.isVisible()) win.hide();
+      else { win.show(); win.focus(); }
+    });
+  } catch (error) {
+    console.error("Could not create Dami tray icon", error);
   }
 }
 
@@ -83,15 +139,37 @@ function createWindow() {
   dockWindow(settings.dock);
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (url.startsWith("https://")) void shell.openExternal(url);
     return { action: "deny" };
   });
 
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isTrustedAppUrl(url)) event.preventDefault();
+  });
+
+  win.webContents.on("render-process-gone", (_event, details) => {
+    console.error("Dami companion renderer stopped", details.reason);
+    if (!isQuitting) windowReloadSoon();
+  });
+
   win.once("ready-to-show", () => win?.show());
+  win.on("close", (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    win?.hide();
+  });
   win.on("closed", () => { win = null; });
 }
 
-app.whenReady().then(() => {
+function windowReloadSoon() {
+  setTimeout(() => {
+    if (win && !win.isDestroyed()) win.reload();
+  }, 1200);
+}
+
+app.whenReady().then(async () => {
+  configurePermissions();
+
   ipcMain.handle("dami:get-dock", () => readSettings().dock);
   ipcMain.handle("dami:set-dock", (_event, dock) => {
     if (dock !== "top" && dock !== "bottom") throw new Error("Invalid dock position");
@@ -105,13 +183,19 @@ app.whenReady().then(() => {
     syncLoginItem(settings);
     return settings.launchAtStartup;
   });
+  ipcMain.handle("dami:show", () => { win?.show(); win?.focus(); return true; });
+  ipcMain.handle("dami:hide", () => { win?.hide(); return true; });
 
   createWindow();
+  await createTray();
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (!win) createWindow();
+    else { win.show(); win.focus(); }
   });
 });
 
+app.on("before-quit", () => { isQuitting = true; });
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform === "darwin") return;
+  if (isQuitting) app.quit();
 });
