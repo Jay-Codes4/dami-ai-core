@@ -1,86 +1,120 @@
 .dami-avatar {
   isolation: isolate;
+  perspective: 900px;
 }
 
 .dami-character {
   pointer-events: none;
   user-select: none;
-  transform-origin: 50% 56%;
+  transform-origin: 50% 58%;
   will-change: transform, filter;
+  backface-visibility: hidden;
 }
 
+.dami-halo {
+  transition: transform 90ms linear, opacity 220ms ease;
+  will-change: transform, opacity;
+}
+
+/* Every movement transforms the complete original robot as one rigid visual.
+   No body-part slicing, overlays or independent limbs: Dami stays intact. */
 .dami-avatar[data-dami-state="idle"] .dami-character {
-  animation: dami-idle 4.8s ease-in-out infinite;
+  animation: dami-idle 5.4s cubic-bezier(.45,.05,.55,.95) infinite;
 }
 
 .dami-avatar[data-dami-state="welcome"] .dami-character {
-  animation: dami-welcome 1.9s ease-in-out 1, dami-idle 4.8s ease-in-out 1.9s infinite;
+  animation: dami-welcome 1.65s cubic-bezier(.22,.61,.36,1) 1, dami-idle 5.4s cubic-bezier(.45,.05,.55,.95) 1.65s infinite;
 }
 
 .dami-avatar[data-dami-state="listening"] .dami-character {
-  animation: dami-listening 1.45s ease-in-out infinite;
-  filter: drop-shadow(0 10px 22px color-mix(in oklab, var(--primary) 18%, transparent));
+  animation: dami-listening 1.7s cubic-bezier(.37,0,.63,1) infinite;
+  filter: drop-shadow(0 11px 24px color-mix(in oklab, var(--primary) 20%, transparent));
+}
+.dami-avatar[data-dami-state="listening"] .dami-halo {
+  opacity: .9;
+  animation: dami-listening-halo 1.55s ease-in-out infinite;
 }
 
 .dami-avatar[data-dami-state="thinking"] .dami-character {
-  animation: dami-thinking 2.2s ease-in-out infinite;
+  animation: dami-thinking 2.55s cubic-bezier(.45,.05,.55,.95) infinite;
 }
 
 .dami-avatar[data-dami-state="speaking"] .dami-character {
-  animation: dami-speaking 1s ease-in-out infinite;
-  filter: drop-shadow(0 10px 22px color-mix(in oklab, var(--primary) 20%, transparent));
+  animation: dami-speaking 1.28s cubic-bezier(.37,0,.63,1) infinite;
+  filter: drop-shadow(0 11px 24px color-mix(in oklab, var(--primary) 22%, transparent));
 }
 
 .dami-avatar[data-dami-state="success"] .dami-character {
-  animation: dami-success 900ms ease-out 1, dami-idle 4.8s ease-in-out 900ms infinite;
+  animation: dami-success 1.15s cubic-bezier(.22,.61,.36,1) 1, dami-idle 5.4s cubic-bezier(.45,.05,.55,.95) 1.15s infinite;
 }
 
 .dami-avatar[data-dami-state="error"] .dami-character {
-  animation: dami-error 720ms ease-in-out 1, dami-idle 5.2s ease-in-out 720ms infinite;
+  animation: dami-error 760ms cubic-bezier(.36,.07,.19,.97) 1, dami-idle 5.4s cubic-bezier(.45,.05,.55,.95) 760ms infinite;
 }
 
 @keyframes dami-idle {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-5px) rotate(0.5deg); }
+  0%,100% { transform: translate3d(0,0,0) rotate(0deg) scale(1); }
+  20% { transform: translate3d(0,-2px,0) rotate(-.28deg) scale(1.002); }
+  50% { transform: translate3d(0,-6px,0) rotate(.38deg) scale(1.006); }
+  78% { transform: translate3d(0,-3px,0) rotate(-.18deg) scale(1.003); }
 }
 
+/* A quick whole-character greeting: lively, but never bends or separates Dami. */
 @keyframes dami-welcome {
-  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
-  20% { transform: translateY(-5px) rotate(-4deg) scale(1.015); }
-  42% { transform: translateY(-8px) rotate(4deg) scale(1.025); }
-  64% { transform: translateY(-5px) rotate(-3deg) scale(1.015); }
-  82% { transform: translateY(-3px) rotate(2deg) scale(1.008); }
+  0% { transform: translate3d(0,2px,0) rotate(0deg) scale(.985); }
+  18% { transform: translate3d(0,-8px,0) rotate(-3deg) scale(1.018); }
+  36% { transform: translate3d(1px,-10px,0) rotate(3.4deg) scale(1.025); }
+  54% { transform: translate3d(-1px,-7px,0) rotate(-2.5deg) scale(1.016); }
+  72% { transform: translate3d(0,-5px,0) rotate(1.5deg) scale(1.01); }
+  88% { transform: translate3d(0,-2px,0) rotate(-.55deg) scale(1.004); }
+  100% { transform: translate3d(0,0,0) rotate(0deg) scale(1); }
 }
 
+/* Listening leans toward the user and breathes gently rather than bouncing. */
 @keyframes dami-listening {
-  0%, 100% { transform: translateY(-2px) scale(1); }
-  50% { transform: translateY(-7px) scale(1.02); }
+  0%,100% { transform: translate3d(0,-2px,0) rotate(-.45deg) scale(1.006); }
+  32% { transform: translate3d(0,-6px,0) rotate(.5deg) scale(1.015); }
+  66% { transform: translate3d(0,-4px,0) rotate(-.2deg) scale(1.01); }
+}
+@keyframes dami-listening-halo {
+  0%,100% { opacity:.48; }
+  50% { opacity:.9; }
 }
 
+/* Slow curious sway while legal research is running. */
 @keyframes dami-thinking {
-  0%, 100% { transform: translateY(-1px) rotate(-1.6deg); }
-  50% { transform: translateY(-5px) rotate(1.6deg); }
+  0%,100% { transform: translate3d(0,-2px,0) rotate(-1.15deg) scale(1); }
+  25% { transform: translate3d(-2px,-5px,0) rotate(-.25deg) scale(1.006); }
+  52% { transform: translate3d(1px,-7px,0) rotate(1.25deg) scale(1.009); }
+  76% { transform: translate3d(2px,-4px,0) rotate(.35deg) scale(1.004); }
 }
 
+/* Conversational rhythm while speaking; subtle enough for long answers. */
 @keyframes dami-speaking {
-  0%, 100% { transform: translateY(-2px) rotate(-1deg) scale(1); }
-  35% { transform: translateY(-7px) rotate(1.4deg) scale(1.012); }
-  70% { transform: translateY(-4px) rotate(-0.5deg) scale(0.998); }
+  0%,100% { transform: translate3d(0,-2px,0) rotate(-.55deg) scale(1.004); }
+  22% { transform: translate3d(-1px,-6px,0) rotate(.8deg) scale(1.012); }
+  48% { transform: translate3d(1px,-4px,0) rotate(-.2deg) scale(1.007); }
+  72% { transform: translate3d(0,-7px,0) rotate(.65deg) scale(1.014); }
 }
 
+/* Small celebratory turn. Kept well below a full spin to avoid flat-image distortion. */
 @keyframes dami-success {
-  0%, 100% { transform: translateY(0) scale(1); }
-  45% { transform: translateY(-14px) scale(1.04); }
+  0% { transform: translate3d(0,0,0) rotate(0deg) scale(1); }
+  30% { transform: translate3d(0,-13px,0) rotate(-3deg) scale(1.035); }
+  52% { transform: translate3d(0,-16px,0) rotate(3.5deg) scale(1.045); }
+  72% { transform: translate3d(0,-7px,0) rotate(-1.4deg) scale(1.018); }
+  100% { transform: translate3d(0,0,0) rotate(0deg) scale(1); }
 }
 
 @keyframes dami-error {
-  0%, 100% { transform: translateX(0) translateY(0) rotate(0deg); }
-  25% { transform: translateX(-4px) translateY(2px) rotate(-1.5deg); }
-  60% { transform: translateX(4px) translateY(2px) rotate(1.5deg); }
+  0%,100% { transform: translate3d(0,0,0) rotate(0deg); }
+  22% { transform: translate3d(-3px,1px,0) rotate(-1deg); }
+  48% { transform: translate3d(3px,1px,0) rotate(1deg); }
+  72% { transform: translate3d(-1px,0,0) rotate(-.35deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dami-character {
+  .dami-character, .dami-halo {
     transform: none !important;
     animation: none !important;
     filter: none !important;
