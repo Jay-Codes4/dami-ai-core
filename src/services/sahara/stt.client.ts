@@ -1,10 +1,11 @@
-/** Browser microphone capture with live interim transcript + Sahara final STT. */
+/** Browser microphone capture with resilient live interim transcript + Sahara final STT. */
 export const TARGET_SAMPLE_RATE = 16000;
 export class MicrophoneError extends Error { constructor(message:string,public reason:"denied"|"unavailable"|"empty"){super(message);this.name="MicrophoneError";} }
 
 type RecognitionResultLike={isFinal:boolean;0?:{transcript?:string}};
 type RecognitionEventLike={resultIndex:number;results:ArrayLike<RecognitionResultLike>};
-type RecognitionLike={continuous:boolean;interimResults:boolean;lang:string;start():void;stop():void;abort():void;onresult:((e:RecognitionEventLike)=>void)|null;onerror:((e:unknown)=>void)|null;onend:(()=>void)|null};
+type RecognitionErrorLike={error?:string};
+type RecognitionLike={continuous:boolean;interimResults:boolean;lang:string;start():void;stop():void;abort():void;onresult:((e:RecognitionEventLike)=>void)|null;onerror:((e:RecognitionErrorLike)=>void)|null;onend:(()=>void)|null};
 type RecognitionCtor=new()=>RecognitionLike;
 
 export interface Recorder { stop():Promise<Float32Array>; cancel():void; level():number; transcript():string; }
@@ -12,12 +13,35 @@ export interface Recorder { stop():Promise<Float32Array>; cancel():void; level()
 function startLiveRecognition(language:string){
   const w=window as typeof window & {SpeechRecognition?:RecognitionCtor;webkitSpeechRecognition?:RecognitionCtor};
   const Ctor=w.SpeechRecognition??w.webkitSpeechRecognition;if(!Ctor)return null;
-  const recognition=new Ctor();recognition.continuous=true;recognition.interimResults=true;recognition.lang=language||"en-NG";
-  let finalText="",interim="",active=true;
-  recognition.onresult=(event)=>{interim="";for(let i=event.resultIndex;i<event.results.length;i++){const r=event.results[i];const text=r?.[0]?.transcript?.trim()??"";if(!text)continue;if(r.isFinal)finalText=`${finalText} ${text}`.trim();else interim=`${interim} ${text}`.trim();}};
-  recognition.onerror=()=>{};recognition.onend=()=>{active=false;};
-  try{recognition.start();}catch{return null;}
-  return{get:()=>`${finalText} ${interim}`.trim(),stop:()=>{if(active){try{recognition.stop();}catch{}active=false;}},abort:()=>{try{recognition.abort();}catch{}active=false;}};
+  const recognition=new Ctor();
+  recognition.continuous=true;recognition.interimResults=true;recognition.lang=language||"en-NG";
+  let finalText="",interim="",wanted=true,started=false,restartTimer:ReturnType<typeof setTimeout>|null=null;
+  const start=()=>{
+    if(!wanted)return;
+    try{recognition.start();started=true;}catch{restartTimer=setTimeout(start,250);}
+  };
+  recognition.onresult=(event)=>{
+    interim="";
+    for(let i=event.resultIndex;i<event.results.length;i++){
+      const r=event.results[i];const text=r?.[0]?.transcript?.trim()??"";if(!text)continue;
+      if(r.isFinal)finalText=`${finalText} ${text}`.trim();else interim=`${interim} ${text}`.trim();
+    }
+  };
+  recognition.onerror=(event)=>{
+    const code=event?.error??"";
+    if(code==="language-not-supported"||code==="bad-grammar")recognition.lang="en-US";
+    if(code==="not-allowed"||code==="service-not-allowed")wanted=false;
+  };
+  recognition.onend=()=>{
+    started=false;
+    if(wanted)restartTimer=setTimeout(start,180);
+  };
+  start();
+  return{
+    get:()=>`${finalText} ${interim}`.trim(),
+    stop:()=>{wanted=false;if(restartTimer)clearTimeout(restartTimer);if(started){try{recognition.stop();}catch{}}},
+    abort:()=>{wanted=false;if(restartTimer)clearTimeout(restartTimer);try{recognition.abort();}catch{}},
+  };
 }
 
 export async function startRecording(maxSeconds:number,language="en-NG"):Promise<Recorder>{
@@ -33,7 +57,24 @@ function concat(buffers:Float32Array[]){const total=buffers.reduce((n,b)=>n+b.le
 export function resample(input:Float32Array,from:number,to:number){if(from===to)return input;const ratio=from/to,out=new Float32Array(Math.floor(input.length/ratio));for(let i=0;i<out.length;i++){const p=i*ratio,l=Math.floor(p),h=Math.min(l+1,input.length-1),w=p-l;out[i]=input[l]!*(1-w)+input[h]!*w;}return out;}
 export function floatToPcm16Base64(samples:Float32Array){const buffer=new ArrayBuffer(samples.length*2),view=new DataView(buffer);for(let i=0;i<samples.length;i++){const c=Math.max(-1,Math.min(1,samples[i]!));view.setInt16(i*2,c<0?c*0x8000:c*0x7fff,true);}let binary="";const bytes=new Uint8Array(buffer),CHUNK=0x8000;for(let i=0;i<bytes.length;i+=CHUNK)binary+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));return btoa(binary);}
 export interface TranscriptionResult{text:string;durationMs:number;requestId:string|null;}
+
+async function saharaFinal(samples:Float32Array,options:{language:string;codeSwitching:boolean}){
+ const response=await fetch("/api/sahara-stt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({audioBase64:floatToPcm16Base64(samples),sampleRate:TARGET_SAMPLE_RATE,language:options.language,codeSwitching:options.codeSwitching})});
+ const raw=await response.text();let payload:({error?:string}&Partial<TranscriptionResult>)|null=null;try{payload=raw?JSON.parse(raw):null;}catch{}
+ if(response.ok&&payload?.text?.trim())return{text:payload.text.trim(),durationMs:payload.durationMs??0,requestId:payload.requestId??null};
+ throw new Error(payload?.error?.trim()||`Speech transcription failed (HTTP ${response.status}). Please try again.`);
+}
+
 export async function transcribeSamples(samples:Float32Array,options:{language:string;codeSwitching:boolean;browserTranscript?:string}):Promise<TranscriptionResult>{
- const fallback=options.browserTranscript?.trim()??"";const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),12000);
- try{const response=await fetch("/api/sahara-stt",{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify({audioBase64:floatToPcm16Base64(samples),sampleRate:TARGET_SAMPLE_RATE,language:options.language,codeSwitching:options.codeSwitching})});const raw=await response.text();let payload:({error?:string}&Partial<TranscriptionResult>)|null=null;try{payload=raw?JSON.parse(raw):null;}catch{}if(response.ok&&payload?.text?.trim())return{text:payload.text.trim(),durationMs:payload.durationMs??0,requestId:payload.requestId??null};if(fallback)return{text:fallback,durationMs:0,requestId:null};throw new Error(payload?.error?.trim()||`Speech transcription failed (HTTP ${response.status}). Please try again.`);}catch(error){if(fallback)return{text:fallback,durationMs:0,requestId:null};if((error as Error)?.name==="AbortError")throw new Error("Sahara is taking too long to transcribe right now. Please try again.");throw new Error("Dami couldn't reach the speech server. Check your connection and try again.");}finally{clearTimeout(timer);}
+ const fallback=options.browserTranscript?.trim()??"";
+ const sahara=saharaFinal(samples,options);
+ // When live browser recognition has already produced a usable transcript, give
+ // Sahara a short window to return the authoritative final text, but never make
+ // the user stare at a timeout. Sahara still receives every voice turn.
+ if(fallback){
+   const fastFallback=new Promise<TranscriptionResult>((resolve)=>setTimeout(()=>resolve({text:fallback,durationMs:0,requestId:null}),1800));
+   try{return await Promise.race([sahara,fastFallback]);}catch{return{text:fallback,durationMs:0,requestId:null};}
+ }
+ const controllerTimeout=new Promise<TranscriptionResult>((_,reject)=>setTimeout(()=>reject(new Error("Sahara is taking too long to transcribe right now. Please try again.")),8000));
+ try{return await Promise.race([sahara,controllerTimeout]);}catch(error){throw error instanceof Error?error:new Error("Dami couldn't reach the speech server. Check your connection and try again.");}
 }
