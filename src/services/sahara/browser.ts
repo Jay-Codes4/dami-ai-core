@@ -15,6 +15,9 @@ export interface TranscriptionResult {
 
 export interface SpeechHandle {
   stop(): void;
+  pause(): void;
+  resume(): void;
+  isPaused(): boolean;
   ended: Promise<void>;
 }
 
