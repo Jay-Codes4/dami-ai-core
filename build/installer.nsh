@@ -1,9 +1,7 @@
 ; Dami installer branding for electron-builder / NSIS.
-; High-contrast light wizard so text and controls never look faded.
+; Keep electron-builder's own MUI background definitions intact to avoid duplicate defines.
 
 !macro customHeader
-  !define MUI_BGCOLOR "FFFFFF"
-  !define MUI_TEXTCOLOR "111827"
   !define MUI_FINISHPAGE_LINK_COLOR "155EEF"
   !define MUI_WELCOMEPAGE_TITLE "Install Dami"
   !define MUI_WELCOMEPAGE_TEXT "Your voice-first legal AI companion.$\r$\n$\r$\nDami can live on your desktop, respond to \"Hey Dami\", and help you research legal questions by voice.$\r$\n$\r$\nClick Next to continue."
@@ -13,7 +11,7 @@
 !macroend
 
 !macro customInit
-  ; Force Windows controls onto a clean white surface with strong dark text.
-  ; This avoids the low-contrast/washed-out appearance seen in the earlier build.
+  ; Apply high contrast directly to the installer window instead of redefining
+  ; electron-builder's MUI_BGCOLOR/MUI_TEXTCOLOR constants.
   SetCtlColors $HWNDPARENT 111827 FFFFFF
 !macroend
