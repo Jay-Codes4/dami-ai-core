@@ -4,9 +4,8 @@
  *   welcome → idle → listening → transcribing → researching → answered → speaking
  *
  * Voice capture uses an adaptive silence detector so users can speak naturally
- * without pressing Done Speaking. After real speech has started, roughly 2
- * seconds of sustained quiet is treated as the end of the turn and submitted
- * automatically for transcription.
+ * without pressing Done Speaking. After real speech has started, a short period
+ * of sustained quiet is treated as the end of the turn and submitted automatically.
  */
 
 import { useServerFn } from "@tanstack/react-start";
@@ -37,20 +36,20 @@ const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
 };
 
 export const STAGE_LABEL: Record<VoiceStage, string> = {
-  welcome: "Hi — I'm Dami. Talk to me when you're ready.",
+  welcome: "Hi, I'm Dami. Talk to me when you're ready.",
   idle: "Ready when you are.",
-  "requesting-permission": "Waiting for microphone permission…",
-  listening: "I'm listening… just speak naturally and I'll know when you're done.",
-  transcribing: "Got it. Turning your voice into text…",
-  researching: "I'm checking the law and the strongest available authorities…",
+  "requesting-permission": "Waiting for microphone permission...",
+  listening: "I'm listening. Just speak naturally and I'll know when you're done.",
+  transcribing: "Got it. Turning your voice into text...",
+  researching: "I'm checking the law and the strongest available authorities...",
   answered: "I found something useful for you.",
-  speaking: "I'm speaking…",
+  speaking: "I'm speaking...",
   error: "Something went wrong.",
 };
 
-const END_OF_SPEECH_SILENCE_MS = 2000;
-const LISTENING_GRACE_MS = 650;
-const SPEECH_CONFIRM_MS = 160;
+const END_OF_SPEECH_SILENCE_MS = 1200;
+const LISTENING_GRACE_MS = 450;
+const SPEECH_CONFIRM_MS = 120;
 const MIN_SPEECH_THRESHOLD = 0.032;
 const NOISE_MULTIPLIER = 2.0;
 const NOISE_MARGIN = 0.016;
@@ -171,8 +170,6 @@ export function useVoiceSession() {
         storage.saveSession(record);
         setSession(record);
 
-        // Voice is a core part of Dami, so evidence warnings no longer suppress
-        // playback. Dami speaks the answer and its caveat instead of going silent.
         if (storage.getSettings().speakAnswers) {
           await readAloud(result.answer);
         }
@@ -288,7 +285,7 @@ export function useVoiceSession() {
         } else {
           silenceStartedAt = null;
         }
-      }, 100);
+      }, 80);
     } catch (err) {
       recorderRef.current = null;
       stopLevelMeter();
