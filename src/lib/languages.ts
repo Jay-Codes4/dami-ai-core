@@ -21,7 +21,7 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
     shortLabel: "English",
     codeSwitched: false,
     ttsLanguage: "en",
-    preferredAccent: "yoruba",
+    preferredAccent: "twi",
   },
   {
     code: "ak",
@@ -29,7 +29,7 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
     shortLabel: "Akan-English",
     codeSwitched: true,
     ttsLanguage: "en",
-    preferredAccent: "yoruba",
+    preferredAccent: "twi",
   },
   {
     code: "yo",
@@ -53,7 +53,7 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
     shortLabel: "Pidgin-English",
     codeSwitched: true,
     ttsLanguage: "en",
-    preferredAccent: "yoruba",
+    preferredAccent: "twi",
   },
 ];
 
