@@ -51,9 +51,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10">{children}</main>
 
       <footer className="border-t border-border/60 py-6">
-        <p className="mx-auto max-w-3xl px-4 text-center text-xs leading-relaxed text-muted-foreground">
-          {DISCLAIMER}
-        </p>
+        <div className="mx-auto max-w-3xl space-y-3 px-4 text-center text-xs leading-relaxed text-muted-foreground">
+          <p>{DISCLAIMER}</p>
+          <div className="flex items-center justify-center gap-4">
+            <Link to="/privacy" className="hover:text-foreground hover:underline">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-foreground hover:underline">Terms of Use</Link>
+          </div>
+        </div>
       </footer>
     </div>
   );
