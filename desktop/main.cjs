@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, ipcMain, screen, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const WINDOW_WIDTH = 280;
 const WINDOW_HEIGHT = 330;
 const EDGE_GAP = 18;
+const DEFAULT_WEB_URL = "https://dami-ai-core.vercel.app";
 
 let win = null;
 
@@ -17,10 +18,11 @@ function readSettings() {
     return {
       dock: "bottom",
       launchAtStartup: true,
+      webUrl: DEFAULT_WEB_URL,
       ...JSON.parse(fs.readFileSync(settingsPath(), "utf8")),
     };
   } catch {
-    return { dock: "bottom", launchAtStartup: true };
+    return { dock: "bottom", launchAtStartup: true, webUrl: DEFAULT_WEB_URL };
   }
 }
 
@@ -74,10 +76,16 @@ function createWindow() {
   if (process.platform === "darwin") win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
   const devUrl = "http://localhost:3000/companion?desktop=1";
-  const base = process.env.DAMI_DESKTOP_URL;
-  const target = base ? `${base.replace(/\/$/, "")}/companion?desktop=1` : devUrl;
-  void win.loadURL(target);
+  const configured = process.env.DAMI_DESKTOP_URL || settings.webUrl || DEFAULT_WEB_URL;
+  const base = app.isPackaged ? configured : (process.env.DAMI_DESKTOP_URL || "http://localhost:3000");
+  const target = `${base.replace(/\/$/, "")}/companion?desktop=1`;
+  void win.loadURL(app.isPackaged ? target : devUrl);
   dockWindow(settings.dock);
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: "deny" };
+  });
 
   win.once("ready-to-show", () => win?.show());
   win.on("closed", () => { win = null; });
