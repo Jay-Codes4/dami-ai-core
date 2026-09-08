@@ -11,7 +11,6 @@ import type { DamiLanguageCode } from "./languages";
 
 export type ISODateString = string;
 
-/** Lifecycle of a single voice interaction. */
 export type VoiceStage =
   | "idle"
   | "welcome"
@@ -23,7 +22,6 @@ export type VoiceStage =
   | "speaking"
   | "error";
 
-/** Visual/behavioural states of the Dami character. */
 export type DamiState =
   | "idle"
   | "welcome"
@@ -36,7 +34,6 @@ export type DamiState =
 export interface User {
   id: string;
   displayName: string;
-  /** Kept deliberately minimal — Dami stores no unnecessary personal data. */
   locale: string;
   createdAt: ISODateString;
 }
@@ -60,9 +57,7 @@ export interface Message {
 export interface Transcript {
   id: string;
   conversationId: string;
-  /** Live, non-authoritative text streamed while the user speaks. */
   partialText: string;
-  /** Committed text — the only transcript used for legal processing. */
   finalText: string;
   durationMs: number;
   engine: "sahara-stt" | "browser-speech" | "typed";
@@ -76,12 +71,6 @@ export type LegalDocumentType =
   | "regulation"
   | "public-service-guidance";
 
-/**
- * A verified, citation-level record of a real legal source.
- * `summary` is an editorial description written for retrieval — it is never
- * presented as a quotation. Quoted text may only ever come from ingested
- * source documents, never from a language model.
- */
 export interface LegalSource {
   id: string;
   title: string;
@@ -145,16 +134,16 @@ export interface SavedDocument {
 
 export interface DamiSettings {
   theme: "light" | "dark" | "system";
-  /** Sahara input language. Launch set is intentionally small for deadline QA. */
   speechLanguage: DamiLanguageCode;
-  /** Sahara TTS voice preferences. */
   voiceAccent: string;
   voiceGender: "female" | "male";
   speakAnswers: boolean;
   maxRecordingSeconds: number;
   codeSwitching: boolean;
-  /** Desktop companion placement once running inside Electron. */
   desktopDock: "top" | "bottom";
+  wakeWordEnabled: boolean;
+  floatingAvatarEnabled: boolean;
+  launchAtStartup: boolean;
 }
 
 export const DEFAULT_SETTINGS: DamiSettings = {
@@ -166,4 +155,7 @@ export const DEFAULT_SETTINGS: DamiSettings = {
   maxRecordingSeconds: 120,
   codeSwitching: true,
   desktopDock: "top",
+  wakeWordEnabled: true,
+  floatingAvatarEnabled: true,
+  launchAtStartup: true,
 };
