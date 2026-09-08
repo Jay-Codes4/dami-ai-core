@@ -4,6 +4,7 @@ export interface SpeechHandle {
   pause(): void;
   resume(): void;
   isPaused(): boolean;
+  started: Promise<void>;
   ended: Promise<void>;
 }
 
@@ -60,12 +61,12 @@ function sentenceChunks(text: string) {
   const sentences = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [clean];
   const chunks: string[] = [];
   for (const sentence of sentences) {
-    if (sentence.length <= 120) chunks.push(sentence);
-    else chunks.push(...splitLong(sentence, 105));
+    if (sentence.length <= 110) chunks.push(sentence);
+    else chunks.push(...splitLong(sentence, 95));
   }
-  // Keep the first chunk small so playback can begin as soon as possible.
-  if (chunks[0] && chunks[0].length > 85) {
-    const first = splitLong(chunks.shift()!, 80);
+  // Very short first chunk gets the first audible words back quickly.
+  if (chunks[0] && chunks[0].length > 55) {
+    const first = splitLong(chunks.shift()!, 48);
     chunks.unshift(...first);
   }
   return chunks.filter((chunk) => chunk.length >= 2);
@@ -82,26 +83,34 @@ function browserSpeech(text: string, o: VoiceOptions): SpeechHandle {
   const preferred = voices.find((v) => /female|woman|aria|jenny|zira/i.test(v.name) && /en|nigeria|yoruba|africa/i.test(`${v.name} ${v.lang}`))
     ?? voices.find((v) => !/male/i.test(v.name) && v.lang.toLowerCase().startsWith("en"));
   if (preferred) u.voice = preferred;
+
   let settled = false;
   let paused = false;
-  let settle!: () => void;
-  const ended = new Promise<void>((resolve) => { settle = resolve; });
-  const finish = () => { if (!settled) { settled = true; settle(); } };
+  let startedDone = false;
+  let resolveStarted!: () => void;
+  let resolveEnded!: () => void;
+  const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
+  const ended = new Promise<void>((resolve) => { resolveEnded = resolve; });
+  const markStarted = () => { if (!startedDone) { startedDone = true; resolveStarted(); } };
+  const finish = () => { markStarted(); if (!settled) { settled = true; resolveEnded(); } };
+  u.addEventListener("start", markStarted, { once: true });
   u.addEventListener("end", finish, { once: true });
   u.addEventListener("error", finish, { once: true });
   window.speechSynthesis.speak(u);
+
   return {
     stop() { window.speechSynthesis.cancel(); paused = false; finish(); },
     pause() { if (!settled && !paused) { window.speechSynthesis.pause(); paused = true; } },
     resume() { if (!settled && paused) { window.speechSynthesis.resume(); paused = false; } },
     isPaused: () => paused,
+    started,
     ended,
   };
 }
 
 async function requestChunk(text: string, o: VoiceOptions) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4500);
+  const timer = setTimeout(() => controller.abort(), 4000);
   try {
     let response = await fetch("/api/sahara-tts", {
       method: "POST",
@@ -133,14 +142,20 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
   let stopped = false;
   let paused = false;
   let settled = false;
+  let startedDone = false;
   let currentAudio: HTMLAudioElement | null = null;
+  let fallbackHandle: SpeechHandle | null = null;
   const urls = new Set<string>();
   let resumeWaiters: Array<() => void> = [];
+  let resolveStarted!: () => void;
   let resolveEnded!: () => void;
+  const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
   const ended = new Promise<void>((resolve) => { resolveEnded = resolve; });
+  const markStarted = () => { if (!startedDone) { startedDone = true; resolveStarted(); } };
   const finish = () => {
     if (settled) return;
     settled = true;
+    markStarted();
     for (const url of urls) URL.revokeObjectURL(url);
     urls.clear();
     resolveEnded();
@@ -150,8 +165,7 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     await new Promise<void>((resolve) => resumeWaiters.push(resolve));
   };
 
-  // Start generating every chunk immediately. Playback awaits only the chunk it needs,
-  // which removes the sentence-to-sentence network gap.
+  // Fetch all chunks immediately so sentence transitions do not wait on the network.
   const pending = chunks.map((chunk) => requestChunk(chunk, o));
 
   void (async () => {
@@ -161,12 +175,19 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
         if (stopped) break;
         const blob = await pending[i];
         if (!blob) throw new Error("Sahara voice unavailable");
+        // Pause may have been pressed while this chunk was downloading.
+        await waitUntilResumed();
+        if (stopped) break;
+
         const url = URL.createObjectURL(blob);
         urls.add(url);
         const audio = new Audio(url);
         currentAudio = audio;
         audio.preload = "auto";
+        audio.playbackRate = 1.04;
+        audio.addEventListener("playing", markStarted, { once: true });
         await audio.play();
+        if (paused) audio.pause();
         await new Promise<void>((resolve, reject) => {
           audio.addEventListener("ended", () => resolve(), { once: true });
           audio.addEventListener("error", () => reject(new Error("Audio playback failed.")), { once: true });
@@ -177,10 +198,10 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       }
     } catch {
       if (!stopped) {
-        const fallback = browserSpeech(chunks.join(" "), o);
-        if (paused) fallback.pause();
-        currentAudio = null;
-        await fallback.ended;
+        fallbackHandle = browserSpeech(chunks.join(" "), o);
+        if (paused) fallbackHandle.pause();
+        void fallbackHandle.started.then(markStarted);
+        await fallbackHandle.ended;
       }
     } finally {
       finish();
@@ -191,6 +212,7 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     stop() {
       stopped = true;
       paused = false;
+      fallbackHandle?.stop();
       currentAudio?.pause();
       currentAudio = null;
       for (const release of resumeWaiters.splice(0)) release();
@@ -199,15 +221,18 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     pause() {
       if (stopped || settled || paused) return;
       paused = true;
+      fallbackHandle?.pause();
       currentAudio?.pause();
     },
     resume() {
       if (stopped || settled || !paused) return;
       paused = false;
+      fallbackHandle?.resume();
       if (currentAudio) void currentAudio.play().catch(() => undefined);
       for (const release of resumeWaiters.splice(0)) release();
     },
     isPaused: () => paused,
+    started,
     ended,
   };
 }
