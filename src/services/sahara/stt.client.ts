@@ -1,80 +1,261 @@
-/** Browser microphone capture with resilient live interim transcript + Sahara final STT. */
-export const TARGET_SAMPLE_RATE = 16000;
-export class MicrophoneError extends Error { constructor(message:string,public reason:"denied"|"unavailable"|"empty"){super(message);this.name="MicrophoneError";} }
+/** Browser microphone capture with live interim transcript + compact MediaRecorder audio for Sahara. */
+export class MicrophoneError extends Error {
+  constructor(message: string, public reason: "denied" | "unavailable" | "empty") {
+    super(message);
+    this.name = "MicrophoneError";
+  }
+}
 
-type RecognitionResultLike={isFinal:boolean;0?:{transcript?:string}};
-type RecognitionEventLike={resultIndex:number;results:ArrayLike<RecognitionResultLike>};
-type RecognitionErrorLike={error?:string};
-type RecognitionLike={continuous:boolean;interimResults:boolean;lang:string;start():void;stop():void;abort():void;onresult:((e:RecognitionEventLike)=>void)|null;onerror:((e:RecognitionErrorLike)=>void)|null;onend:(()=>void)|null};
-type RecognitionCtor=new()=>RecognitionLike;
+type RecognitionResultLike = { isFinal: boolean; 0?: { transcript?: string } };
+type RecognitionEventLike = { resultIndex: number; results: ArrayLike<RecognitionResultLike> };
+type RecognitionErrorLike = { error?: string };
+type RecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((e: RecognitionEventLike) => void) | null;
+  onerror: ((e: RecognitionErrorLike) => void) | null;
+  onend: (() => void) | null;
+};
+type RecognitionCtor = new () => RecognitionLike;
 
-export interface Recorder { stop():Promise<Float32Array>; cancel():void; level():number; transcript():string; }
+export interface AudioCapture {
+  blob: Blob;
+  mimeType: string;
+  extension: string;
+  durationMs: number;
+}
 
-function startLiveRecognition(language:string){
-  const w=window as typeof window & {SpeechRecognition?:RecognitionCtor;webkitSpeechRecognition?:RecognitionCtor};
-  const Ctor=w.SpeechRecognition??w.webkitSpeechRecognition;if(!Ctor)return null;
-  const recognition=new Ctor();
-  recognition.continuous=true;recognition.interimResults=true;recognition.lang=language||"en-NG";
-  let finalText="",interim="",wanted=true,started=false,restartTimer:ReturnType<typeof setTimeout>|null=null;
-  const start=()=>{
-    if(!wanted)return;
-    try{recognition.start();started=true;}catch{restartTimer=setTimeout(start,250);}
-  };
-  recognition.onresult=(event)=>{
-    interim="";
-    for(let i=event.resultIndex;i<event.results.length;i++){
-      const r=event.results[i];const text=r?.[0]?.transcript?.trim()??"";if(!text)continue;
-      if(r.isFinal)finalText=`${finalText} ${text}`.trim();else interim=`${interim} ${text}`.trim();
+export interface Recorder {
+  stop(): Promise<AudioCapture>;
+  cancel(): void;
+  level(): number;
+  transcript(): string;
+}
+
+export interface TranscriptionResult {
+  text: string;
+  durationMs: number;
+  requestId: string | null;
+}
+
+function startLiveRecognition(language: string) {
+  const w = window as typeof window & { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
+  const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+  if (!Ctor) return null;
+
+  const recognition = new Ctor();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  // Chrome's web recognizer is much more dependable with a broadly-supported
+  // locale. Sahara still receives the user's selected African language separately.
+  recognition.lang = language === "en-NG" || language === "en" ? "en-US" : language;
+
+  let finalText = "";
+  let interim = "";
+  let wanted = true;
+  let active = false;
+  let restartTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const start = () => {
+    if (!wanted) return;
+    try {
+      recognition.start();
+      active = true;
+    } catch {
+      restartTimer = setTimeout(start, 300);
     }
   };
-  recognition.onerror=(event)=>{
-    const code=event?.error??"";
-    if(code==="language-not-supported"||code==="bad-grammar")recognition.lang="en-US";
-    if(code==="not-allowed"||code==="service-not-allowed")wanted=false;
+
+  recognition.onresult = (event) => {
+    interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      const text = result?.[0]?.transcript?.trim() ?? "";
+      if (!text) continue;
+      if (result.isFinal) finalText = `${finalText} ${text}`.trim();
+      else interim = `${interim} ${text}`.trim();
+    }
   };
-  recognition.onend=()=>{
-    started=false;
-    if(wanted)restartTimer=setTimeout(start,180);
+
+  recognition.onerror = (event) => {
+    const code = event?.error ?? "";
+    if (code === "language-not-supported" || code === "bad-grammar") recognition.lang = "en-US";
+    if (code === "not-allowed" || code === "service-not-allowed") wanted = false;
   };
+
+  recognition.onend = () => {
+    active = false;
+    if (wanted) restartTimer = setTimeout(start, 220);
+  };
+
   start();
-  return{
-    get:()=>`${finalText} ${interim}`.trim(),
-    stop:()=>{wanted=false;if(restartTimer)clearTimeout(restartTimer);if(started){try{recognition.stop();}catch{}}},
-    abort:()=>{wanted=false;if(restartTimer)clearTimeout(restartTimer);try{recognition.abort();}catch{}},
+  return {
+    get: () => `${finalText} ${interim}`.trim(),
+    stop: () => {
+      wanted = false;
+      if (restartTimer) clearTimeout(restartTimer);
+      if (active) try { recognition.stop(); } catch { /* ignore */ }
+    },
+    abort: () => {
+      wanted = false;
+      if (restartTimer) clearTimeout(restartTimer);
+      try { recognition.abort(); } catch { /* ignore */ }
+    },
   };
 }
 
-export async function startRecording(maxSeconds:number,language="en-NG"):Promise<Recorder>{
- if(typeof navigator==="undefined"||!navigator.mediaDevices?.getUserMedia)throw new MicrophoneError("This device can't reach a microphone. You can still type your question to Dami.","unavailable");
- let stream:MediaStream;try{stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});}catch(error){const name=(error as DOMException)?.name;if(name==="NotAllowedError"||name==="SecurityError")throw new MicrophoneError("Dami needs microphone access to listen. Allow microphone access, then try again.","denied");throw new MicrophoneError("Dami couldn't open your microphone. Check that it is connected and free.","unavailable");}
- const recognition=startLiveRecognition(language);
- const AudioCtx=window.AudioContext??(window as unknown as {webkitAudioContext:typeof AudioContext}).webkitAudioContext;const context=new AudioCtx();if(context.state==="suspended")await context.resume();const source=context.createMediaStreamSource(stream),processor=context.createScriptProcessor(2048,1,1),gain=context.createGain();gain.gain.value=0;const buffers:Float32Array[]=[];let peak=0,stopped=false;
- processor.onaudioprocess=(event)=>{if(stopped)return;const input=event.inputBuffer.getChannelData(0);buffers.push(new Float32Array(input));let p=0;for(let i=0;i<input.length;i+=8)p=Math.max(p,Math.abs(input[i]!));peak=peak*.68+p*.32;};source.connect(processor);processor.connect(gain);gain.connect(context.destination);
- const teardown=()=>{if(stopped)return;stopped=true;processor.disconnect();gain.disconnect();source.disconnect();stream.getTracks().forEach(t=>t.stop());recognition?.stop();};const autoStop=setTimeout(teardown,maxSeconds*1000);
- return{async stop(){clearTimeout(autoStop);const sr=context.sampleRate;teardown();const merged=concat(buffers);void context.close();if(!merged.length)throw new MicrophoneError("Dami didn't receive any microphone audio. Try again.","empty");return resample(merged,sr,TARGET_SAMPLE_RATE);},cancel(){clearTimeout(autoStop);recognition?.abort();teardown();void context.close();buffers.length=0;},level:()=>Math.min(1,peak*3),transcript:()=>recognition?.get()??""};
-}
-function concat(buffers:Float32Array[]){const total=buffers.reduce((n,b)=>n+b.length,0),out=new Float32Array(total);let offset=0;for(const b of buffers){out.set(b,offset);offset+=b.length;}return out;}
-export function resample(input:Float32Array,from:number,to:number){if(from===to)return input;const ratio=from/to,out=new Float32Array(Math.floor(input.length/ratio));for(let i=0;i<out.length;i++){const p=i*ratio,l=Math.floor(p),h=Math.min(l+1,input.length-1),w=p-l;out[i]=input[l]!*(1-w)+input[h]!*w;}return out;}
-export function floatToPcm16Base64(samples:Float32Array){const buffer=new ArrayBuffer(samples.length*2),view=new DataView(buffer);for(let i=0;i<samples.length;i++){const c=Math.max(-1,Math.min(1,samples[i]!));view.setInt16(i*2,c<0?c*0x8000:c*0x7fff,true);}let binary="";const bytes=new Uint8Array(buffer),CHUNK=0x8000;for(let i=0;i<bytes.length;i+=CHUNK)binary+=String.fromCharCode(...bytes.subarray(i,i+CHUNK));return btoa(binary);}
-export interface TranscriptionResult{text:string;durationMs:number;requestId:string|null;}
-
-async function saharaFinal(samples:Float32Array,options:{language:string;codeSwitching:boolean}){
- const response=await fetch("/api/sahara-stt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({audioBase64:floatToPcm16Base64(samples),sampleRate:TARGET_SAMPLE_RATE,language:options.language,codeSwitching:options.codeSwitching})});
- const raw=await response.text();let payload:({error?:string}&Partial<TranscriptionResult>)|null=null;try{payload=raw?JSON.parse(raw):null;}catch{}
- if(response.ok&&payload?.text?.trim())return{text:payload.text.trim(),durationMs:payload.durationMs??0,requestId:payload.requestId??null};
- throw new Error(payload?.error?.trim()||`Speech transcription failed (HTTP ${response.status}). Please try again.`);
+function chooseMimeType() {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/ogg"];
+  return candidates.find((type) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) ?? "";
 }
 
-export async function transcribeSamples(samples:Float32Array,options:{language:string;codeSwitching:boolean;browserTranscript?:string}):Promise<TranscriptionResult>{
- const fallback=options.browserTranscript?.trim()??"";
- const sahara=saharaFinal(samples,options);
- // When live browser recognition has already produced a usable transcript, give
- // Sahara a short window to return the authoritative final text, but never make
- // the user stare at a timeout. Sahara still receives every voice turn.
- if(fallback){
-   const fastFallback=new Promise<TranscriptionResult>((resolve)=>setTimeout(()=>resolve({text:fallback,durationMs:0,requestId:null}),1800));
-   try{return await Promise.race([sahara,fastFallback]);}catch{return{text:fallback,durationMs:0,requestId:null};}
- }
- const controllerTimeout=new Promise<TranscriptionResult>((_,reject)=>setTimeout(()=>reject(new Error("Sahara is taking too long to transcribe right now. Please try again.")),8000));
- try{return await Promise.race([sahara,controllerTimeout]);}catch(error){throw error instanceof Error?error:new Error("Dami couldn't reach the speech server. Check your connection and try again.");}
+function extensionFor(mimeType: string) {
+  return mimeType.includes("ogg") ? "ogg" : "webm";
+}
+
+export async function startRecording(maxSeconds: number, language = "en-NG"): Promise<Recorder> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    throw new MicrophoneError("This browser can't use Dami's live microphone mode. You can still type your question.", "unavailable");
+  }
+
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (error) {
+    const name = (error as DOMException)?.name;
+    if (name === "NotAllowedError" || name === "SecurityError") {
+      throw new MicrophoneError("Dami needs microphone access to listen. Allow microphone access, then try again.", "denied");
+    }
+    throw new MicrophoneError("Dami couldn't open your microphone. Check that it is connected and free.", "unavailable");
+  }
+
+  const recognition = startLiveRecognition(language);
+  const mimeType = chooseMimeType();
+  const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks: Blob[] = [];
+  const startedAt = Date.now();
+  let stopped = false;
+  let cancelled = false;
+
+  // Analyser gives us the voice meter and end-of-speech detection without the old
+  // ScriptProcessor pipeline that duplicated every PCM sample in memory.
+  const AudioCtx = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const context = AudioCtx ? new AudioCtx() : null;
+  if (context?.state === "suspended") await context.resume();
+  const source = context?.createMediaStreamSource(stream) ?? null;
+  const analyser = context?.createAnalyser() ?? null;
+  if (source && analyser) {
+    analyser.fftSize = 512;
+    source.connect(analyser);
+  }
+  const meter = analyser ? new Float32Array(analyser.fftSize) : null;
+
+  mediaRecorder.addEventListener("dataavailable", (event) => {
+    if (!cancelled && event.data.size) chunks.push(event.data);
+  });
+  mediaRecorder.start(200);
+
+  const teardownTracks = () => {
+    stream.getTracks().forEach((track) => track.stop());
+    source?.disconnect();
+    recognition?.stop();
+    void context?.close();
+  };
+
+  const autoStop = setTimeout(() => {
+    if (!stopped && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+  }, maxSeconds * 1000);
+
+  return {
+    stop() {
+      clearTimeout(autoStop);
+      if (stopped) return Promise.reject(new MicrophoneError("That recording has already ended.", "empty"));
+      stopped = true;
+      return new Promise<AudioCapture>((resolve, reject) => {
+        mediaRecorder.addEventListener("stop", () => {
+          teardownTracks();
+          const type = mediaRecorder.mimeType || mimeType || "audio/webm";
+          const blob = new Blob(chunks, { type });
+          if (!blob.size) {
+            reject(new MicrophoneError("Dami didn't receive any microphone audio. Try again.", "empty"));
+            return;
+          }
+          resolve({ blob, mimeType: type, extension: extensionFor(type), durationMs: Date.now() - startedAt });
+        }, { once: true });
+        if (mediaRecorder.state === "inactive") {
+          // The max-duration timer may already have stopped it.
+          teardownTracks();
+          const type = mediaRecorder.mimeType || mimeType || "audio/webm";
+          const blob = new Blob(chunks, { type });
+          if (!blob.size) reject(new MicrophoneError("Dami didn't receive any microphone audio. Try again.", "empty"));
+          else resolve({ blob, mimeType: type, extension: extensionFor(type), durationMs: Date.now() - startedAt });
+        } else {
+          mediaRecorder.stop();
+        }
+      });
+    },
+    cancel() {
+      clearTimeout(autoStop);
+      cancelled = true;
+      stopped = true;
+      recognition?.abort();
+      if (mediaRecorder.state !== "inactive") try { mediaRecorder.stop(); } catch { /* ignore */ }
+      chunks.length = 0;
+      teardownTracks();
+    },
+    level() {
+      if (!analyser || !meter) return 0;
+      analyser.getFloatTimeDomainData(meter);
+      let peak = 0;
+      for (let i = 0; i < meter.length; i += 4) peak = Math.max(peak, Math.abs(meter[i] ?? 0));
+      return Math.min(1, peak * 3);
+    },
+    transcript: () => recognition?.get() ?? "",
+  };
+}
+
+async function saharaFinal(capture: AudioCapture, options: { language: string; codeSwitching: boolean }) {
+  const form = new FormData();
+  form.set("audio", capture.blob, `dami.${capture.extension}`);
+  form.set("language", options.language || "en");
+  form.set("codeSwitching", String(options.codeSwitching));
+  form.set("durationMs", String(capture.durationMs));
+
+  const response = await fetch("/api/sahara-stt", { method: "POST", body: form });
+  const raw = await response.text();
+  let payload: ({ error?: string } & Partial<TranscriptionResult>) | null = null;
+  try { payload = raw ? JSON.parse(raw) : null; } catch { payload = null; }
+  if (response.ok && payload?.text?.trim()) {
+    return { text: payload.text.trim(), durationMs: payload.durationMs ?? 0, requestId: payload.requestId ?? null };
+  }
+  throw new Error(payload?.error?.trim() || `Speech transcription failed (HTTP ${response.status}). Please try again.`);
+}
+
+export async function transcribeSamples(
+  capture: AudioCapture,
+  options: { language: string; codeSwitching: boolean; browserTranscript?: string },
+): Promise<TranscriptionResult> {
+  const fallback = options.browserTranscript?.trim() ?? "";
+  const sahara = saharaFinal(capture, options);
+
+  // The live transcript drives the interface immediately. Sahara still receives
+  // the complete audio turn and wins whenever it returns quickly enough.
+  if (fallback) {
+    const immediate = new Promise<TranscriptionResult>((resolve) =>
+      setTimeout(() => resolve({ text: fallback, durationMs: 0, requestId: null }), 650),
+    );
+    try { return await Promise.race([sahara, immediate]); }
+    catch { return { text: fallback, durationMs: 0, requestId: null }; }
+  }
+
+  const timeout = new Promise<TranscriptionResult>((_, reject) =>
+    setTimeout(() => reject(new Error("Dami didn't get a live transcript and Sahara is still processing. Please try once more.")), 6500),
+  );
+  return Promise.race([sahara, timeout]);
 }
