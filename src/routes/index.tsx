@@ -1,5 +1,5 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { ArrowRight, Globe2, Mic, ScrollText, ShieldCheck } from "lucide-react";
+import { ArrowRight, Download, Globe2, Mic, ScrollText, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
@@ -50,12 +50,8 @@ function Home() {
       <section className="flex flex-col items-center gap-8 py-6 text-center">
         <DamiAvatar state="welcome" size={240} />
         <div className="space-y-4">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">
-            A Voice for Justice
-          </p>
-          <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
-            African legal intelligence you can talk to
-          </h1>
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">A Voice for Justice</p>
+          <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">African legal intelligence you can talk to</h1>
           <p className="mx-auto max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground">
             Dami listens naturally, understands the jurisdiction and legal task you are asking about,
             researches available authorities, and returns a useful answer with sources you can verify.
@@ -64,72 +60,43 @@ function Home() {
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <Button asChild size="lg" className="shadow-[var(--shadow-lift)]">
-            <Link to="/ask">
-              <Mic className="mr-2 h-5 w-5" /> Talk with Dami
-            </Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link to="/research">
-              <Globe2 className="mr-2 h-5 w-5" /> Research with Dami
-            </Link>
-          </Button>
+          <Button asChild size="lg" className="shadow-[var(--shadow-lift)]"><Link to="/ask"><Mic className="mr-2 h-5 w-5" /> Talk with Dami</Link></Button>
+          <Button asChild size="lg" variant="outline"><Link to="/research"><Globe2 className="mr-2 h-5 w-5" /> Research with Dami</Link></Button>
         </div>
+      </section>
+
+      <section className="mt-12 rounded-3xl border border-primary/20 bg-primary/5 p-6 md:flex md:items-center md:justify-between md:gap-8 md:p-8">
+        <div className="max-w-2xl">
+          <p className="text-sm font-semibold text-primary">Want an interactive Dami on your PC?</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">Install Dami Desktop</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Keep Dami floating on your desktop and say “Hey Dami” when you need help. She wakes, listens to your question and brings the legal answer back without making you open the browser first.
+          </p>
+        </div>
+        <Button asChild size="lg" className="mt-5 shrink-0 md:mt-0"><Link to="/desktop"><Download className="mr-2 h-5 w-5" /> Dami Desktop</Link></Button>
       </section>
 
       <section className="mt-14 grid gap-4 md:grid-cols-3">
         {[
-          {
-            icon: Mic,
-            title: "Speak naturally",
-            body: "Use an African-accented voice or switch between the launch languages. Dami listens, follows the conversation and can speak the answer back.",
-          },
-          {
-            icon: ScrollText,
-            title: "Research that earns trust",
-            body: "Dami prioritizes authoritative legal sources, explains why they matter and shows the authorities behind the answer instead of returning generic search snippets.",
-          },
-          {
-            icon: ShieldCheck,
-            title: "Useful, not overconfident",
-            body: "Dami separates verified law from uncertainty, identifies jurisdiction limits and tells you when stronger authority or qualified legal advice is needed.",
-          },
+          { icon: Mic, title: "Speak naturally", body: "Use an African-accented voice or switch between the launch languages. Dami listens, follows the conversation and can speak the answer back." },
+          { icon: ScrollText, title: "Research that earns trust", body: "Dami prioritizes authoritative legal sources, explains why they matter and shows the authorities behind the answer instead of returning generic search snippets." },
+          { icon: ShieldCheck, title: "Useful, not overconfident", body: "Dami separates verified law from uncertainty, identifies jurisdiction limits and tells you when stronger authority or qualified legal advice is needed." },
         ].map(({ icon: Icon, title, body }) => (
           <Card key={title} className="shadow-[var(--shadow-soft)]">
-            <CardHeader className="space-y-2">
-              <Icon className="h-5 w-5 text-primary" />
-              <CardTitle className="text-base">{title}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm leading-relaxed text-muted-foreground">
-              {body}
-            </CardContent>
+            <CardHeader className="space-y-2"><Icon className="h-5 w-5 text-primary" /><CardTitle className="text-base">{title}</CardTitle></CardHeader>
+            <CardContent className="text-sm leading-relaxed text-muted-foreground">{body}</CardContent>
           </Card>
         ))}
       </section>
 
       {sessions.length > 0 && (
         <section className="mt-14 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Recent research</h2>
-            <Link to="/research" className="text-sm text-primary hover:underline">
-              View all
-            </Link>
-          </div>
+          <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Recent research</h2><Link to="/research" className="text-sm text-primary hover:underline">View all</Link></div>
           <div className="grid gap-4 md:grid-cols-3">
             {sessions.map((session) => (
               <Card key={session.id} className="shadow-[var(--shadow-soft)]">
-                <CardHeader>
-                  <CardTitle className="text-sm leading-snug">{session.question}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <p className="line-clamp-3">{session.answer.answer}</p>
-                  <Link
-                    to="/research"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
-                  >
-                    Open <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </CardContent>
+                <CardHeader><CardTitle className="text-sm leading-snug">{session.question}</CardTitle></CardHeader>
+                <CardContent className="space-y-3 text-sm text-muted-foreground"><p className="line-clamp-3">{session.answer.answer}</p><Link to="/research" className="inline-flex items-center gap-1 text-primary hover:underline">Open <ArrowRight className="h-3.5 w-3.5" /></Link></CardContent>
               </Card>
             ))}
           </div>
