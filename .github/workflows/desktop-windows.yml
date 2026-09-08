@@ -6,6 +6,13 @@ on:
     branches: [main]
     paths:
       - "desktop/**"
+      - "build/**"
+      - "src/components/DamiAvatar.tsx"
+      - "src/dami-avatar.css"
+      - "src/routes/companion.tsx"
+      - "src/hooks/useVoiceSession.ts"
+      - "src/services/voice/**"
+      - "src/services/sahara/tts.client.ts"
       - "package.json"
       - ".github/workflows/desktop-windows.yml"
 
@@ -43,4 +50,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "desktop-v0.1.${{ github.run_number }}"
-          gh release create $tag release/Dami-Setup.exe --title "Dami Desktop $tag" --notes "Windows installer for the latest Dami Desktop companion." --latest
+          gh release create $tag release/Dami-Setup.exe --title "Dami Desktop $tag" --notes "Windows installer with Dami's latest wake phrase, listening cue, motion, voice, and installer experience." --latest
