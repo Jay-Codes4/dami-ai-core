@@ -4,6 +4,7 @@ export interface Recorder {
   stop(): Promise<Float32Array>;
   cancel(): void;
   level(): number;
+  transcript(): string;
 }
 
 export interface TranscriptionResult {
@@ -23,20 +24,18 @@ export const prepareAudioPlayback = createClientOnlyFn(async (): Promise<void> =
 });
 
 export const startRecording = createClientOnlyFn(
-  async (maxSeconds: number): Promise<Recorder> => {
-    // This runs directly from the user's Talk with Dami click. Unlock WebAudio
-    // here so the female Sahara response can play after STT + research finish.
+  async (maxSeconds: number, language = "en-NG"): Promise<Recorder> => {
     const tts = await import("./tts.client");
     await tts.prepareAudioPlayback().catch(() => undefined);
     const mod = await import("./stt.client");
-    return mod.startRecording(maxSeconds);
+    return mod.startRecording(maxSeconds, language);
   },
 );
 
 export const transcribeSamples = createClientOnlyFn(
   async (
     samples: Float32Array,
-    options: { language: string; codeSwitching: boolean },
+    options: { language: string; codeSwitching: boolean; browserTranscript?: string },
   ): Promise<TranscriptionResult> => {
     const mod = await import("./stt.client");
     return mod.transcribeSamples(samples, options);
