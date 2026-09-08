@@ -54,40 +54,96 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
   analyser.fftSize = 512; source.connect(analyser); source.connect(processor); processor.connect(context.destination);
   const meter = new Float32Array(analyser.fftSize), startedAt = Date.now();
   let transcript = "", stopped = false, cancelled = false, ack = 0, pending = new Uint8Array(0), finalResolve: ((text: string) => void) | null = null;
+  let terminalError = "";
   const finalPromise = new Promise<string>(resolve => { finalResolve = resolve; });
   const ws = new WebSocket(`${VOICE_WS_URL}?language=${encodeURIComponent(language || "en")}`);
 
-  const appendAndSend = (chunk: Uint8Array) => {
-    const merged = new Uint8Array(pending.length + chunk.length); merged.set(pending); merged.set(chunk, pending.length); pending = merged;
+  const sendChunk = (chunk: Uint8Array) => {
+    ws.send(JSON.stringify({ message_type: "INPUT_AUDIO_CHUNK", audio_base_64: toBase64(chunk), ack_id: ++ack }));
+  };
+
+  const flushFullChunks = () => {
+    if (ws.readyState !== WebSocket.OPEN) return;
     while (pending.length >= 4096) {
-      const send = pending.slice(0, 4096); pending = pending.slice(4096);
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ message_type: "INPUT_AUDIO_CHUNK", audio_base_64: toBase64(send), ack_id: ++ack }));
+      const send = pending.slice(0, 4096);
+      pending = pending.slice(4096);
+      sendChunk(send);
     }
   };
-  processor.onaudioprocess = event => { if (!stopped && !cancelled) appendAndSend(pcm16Bytes(resampleTo16k(event.inputBuffer.getChannelData(0), context.sampleRate))); };
+
+  const appendAndSend = (chunk: Uint8Array) => {
+    const merged = new Uint8Array(pending.length + chunk.length);
+    merged.set(pending); merged.set(chunk, pending.length); pending = merged;
+    flushFullChunks();
+  };
+
+  processor.onaudioprocess = event => {
+    if (!stopped && !cancelled) appendAndSend(pcm16Bytes(resampleTo16k(event.inputBuffer.getChannelData(0), context.sampleRate)));
+  };
+
+  ws.onopen = () => flushFullChunks();
   ws.onmessage = event => {
     try {
       const msg = JSON.parse(String(event.data));
-      const type = msg.message_type;
-      const text = String(msg.transcript ?? msg.text ?? "").trim();
+      const type = String(msg.message_type ?? "");
+      const text = String(
+        type === "COMMITTED_TRANSCRIPT"
+          ? (msg.transcript_text ?? msg.transcript ?? msg.text ?? "")
+          : (msg.transcript ?? msg.transcript_text ?? msg.text ?? "")
+      ).trim();
+
       if ((type === "PARTIAL_TRANSCRIPT" || type === "COMMITTED_TRANSCRIPT") && text) transcript = text;
       if (type === "COMMITTED_TRANSCRIPT") finalResolve?.(transcript);
-      if (type === "GATEWAY_ERROR") finalResolve?.("");
+
+      if (["GATEWAY_ERROR", "ERROR", "INPUT_ERROR", "AUTHENTICATION_ERROR", "RESOURCE_EXHAUSTED", "QUOTA_EXCEEDED", "CHUNK_SIZE_TOO_SMALL", "CHUNK_SIZE_TOO_LARGE", "INSUFFICIENT_AUDIO_ACTIVITY", "SESSION_TIME_LIMIT_EXCEEDED", "CHUNK_ID_MISMATCH_WITH_TOTAL"].includes(type)) {
+        terminalError = String(msg.message ?? type).trim();
+        finalResolve?.("");
+      }
     } catch { /* ignore malformed upstream events */ }
   };
-  ws.onerror = () => finalResolve?.("");
+  ws.onerror = () => { terminalError ||= "Voice streaming connection failed."; finalResolve?.(""); };
+  ws.onclose = () => { if (!stopped && !cancelled) finalResolve?.(transcript); };
 
   const teardown = () => { processor.onaudioprocess = null; try { processor.disconnect(); source.disconnect(); analyser.disconnect(); } catch {} stream.getTracks().forEach(t => t.stop()); void context.close(); };
   const timer = setTimeout(() => { if (!stopped) void finish(); }, maxSeconds * 1000);
+
+  const waitForSocket = async () => {
+    if (ws.readyState === WebSocket.OPEN) return true;
+    if (ws.readyState !== WebSocket.CONNECTING) return false;
+    return new Promise<boolean>(resolve => {
+      const opened = () => { cleanup(); resolve(true); };
+      const failed = () => { cleanup(); resolve(false); };
+      const cleanup = () => { ws.removeEventListener("open", opened); ws.removeEventListener("error", failed); ws.removeEventListener("close", failed); clearTimeout(timeout); };
+      const timeout = window.setTimeout(() => { cleanup(); resolve(false); }, 4000);
+      ws.addEventListener("open", opened, { once: true });
+      ws.addEventListener("error", failed, { once: true });
+      ws.addEventListener("close", failed, { once: true });
+    });
+  };
+
   const finish = async (): Promise<AudioCapture> => {
     if (stopped) throw new MicrophoneError("That recording has already ended.", "empty");
     stopped = true; clearTimeout(timer); teardown();
-    if (pending.length >= 1024 && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ message_type: "INPUT_AUDIO_CHUNK", audio_base_64: toBase64(pending), ack_id: ++ack }));
-    if (ws.readyState === WebSocket.CONNECTING) await new Promise<void>(resolve => { const done=()=>resolve(); ws.addEventListener("open",done,{once:true}); ws.addEventListener("error",done,{once:true}); setTimeout(done,1500); });
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ message_type: "COMMIT" }));
-    const final = await Promise.race([finalPromise, new Promise<string>(resolve => setTimeout(() => resolve(transcript), 3500))]);
+
+    const socketReady = await waitForSocket();
+    if (!socketReady) {
+      try { ws.close(); } catch {}
+      throw new MicrophoneError("Dami couldn't connect to Sahara's live transcription service. Please try again.", "unavailable");
+    }
+
+    flushFullChunks();
+    if (pending.length >= 1024) {
+      sendChunk(pending);
+      pending = new Uint8Array(0);
+    }
+    ws.send(JSON.stringify({ message_type: "COMMIT" }));
+
+    const final = await Promise.race([finalPromise, new Promise<string>(resolve => setTimeout(() => resolve(transcript), 7000))]);
     try { ws.close(1000); } catch {}
-    if (!final.trim()) throw new MicrophoneError("Dami didn't receive a transcript from Sahara. Please try again.", "empty");
+    if (!final.trim()) {
+      const detail = terminalError && !/AUTHENTICATION|QUOTA/i.test(terminalError) ? ` (${terminalError})` : "";
+      throw new MicrophoneError(`Dami didn't receive a transcript from Sahara${detail}. Please try again.`, "empty");
+    }
     transcript = final.trim();
     return { blob: new Blob(), mimeType: "audio/pcm", extension: "pcm", durationMs: Date.now() - startedAt, transcript, streamed: true };
   };
