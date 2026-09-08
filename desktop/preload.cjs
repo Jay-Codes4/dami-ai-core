@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("damiDesktop", {
   show: () => ipcRenderer.invoke("dami:show"),
   hide: () => ipcRenderer.invoke("dami:hide"),
   getWakeStatus: () => ipcRenderer.invoke("dami:get-wake-status"),
+  localTranscribe: () => ipcRenderer.invoke("dami:local-transcribe"),
   onWakeWord: (callback) => {
     const listener = () => callback();
     ipcRenderer.on("dami:wake-word", listener);
