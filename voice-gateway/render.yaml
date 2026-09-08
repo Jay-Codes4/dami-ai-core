@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: dami-voice-gateway
+    runtime: node
+    rootDir: voice-gateway
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: INTRON_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://dami-ai-core.vercel.app
