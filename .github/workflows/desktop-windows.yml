@@ -1,0 +1,47 @@
+name: Build Dami Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "package.json"
+      - ".github/workflows/desktop-windows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Dami installer
+        run: npm run desktop:build:win
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dami-Windows-Installer
+          path: release/Dami-Setup.exe
+          if-no-files-found: error
+
+      - name: Publish latest desktop release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "desktop-v0.1.${{ github.run_number }}"
+          gh release create $tag release/Dami-Setup.exe --title "Dami Desktop $tag" --notes "Windows installer for the latest Dami Desktop companion." --latest
