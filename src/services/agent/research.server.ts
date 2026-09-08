@@ -9,7 +9,7 @@
 import type { Citation, ResearchAnswer } from "@/lib/types";
 
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = process.env["DAMI_GROQ_MODEL"] ?? "llama-3.3-70b-versatile";
+const GROQ_MODEL = process.env["DAMI_GROQ_MODEL"] ?? "openai/gpt-oss-120b";
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
 
 export class ResearchError extends Error {
@@ -68,7 +68,7 @@ async function searchWithExa(question: string, apiKey: string): Promise<ExaResul
     body: JSON.stringify({
       query: `${question}\nFind the strongest current legal authorities. Prioritize constitutions, statutes, regulations, court decisions, gazettes, regulators, government portals, and reputable legal-information institutes.`,
       type: "auto",
-      numResults: 8,
+      numResults: 6,
       contents: {
         highlights: true,
       },
@@ -119,7 +119,7 @@ function renderExaEvidence(results: ExaResult[]): string {
     .map((result, index) => {
       const url = result.url ?? "";
       const highlights = (result.highlights ?? []).join("\n").trim();
-      const evidence = highlights || result.text?.slice(0, 5000) || "No extracted passage available.";
+      const evidence = (highlights || result.text || "No extracted passage available.").slice(0, 2500);
       return [
         `[S${index + 1}] ${result.title || hostFromUrl(url)}`,
         `URL: ${url}`,
@@ -144,6 +144,7 @@ async function callGroq(question: string, groqKey: string, evidence?: string): P
     body: JSON.stringify({
       model: GROQ_MODEL,
       temperature: 0.15,
+      max_completion_tokens: 1800,
       messages: [
         {
           role: "system",
@@ -164,6 +165,9 @@ async function callGroq(question: string, groqKey: string, evidence?: string): P
     console.error("Groq reasoning error", response.status, detail);
     if (response.status === 401 || response.status === 403) {
       throw new ResearchError("Dami's Groq reasoning key isn't authorized correctly yet.", 503);
+    }
+    if (response.status === 404) {
+      throw new ResearchError("Dami's configured Groq model is unavailable for this account. Redeploy with the current free-tier model.", 503);
     }
     if (response.status === 429) {
       throw new ResearchError("Dami's free reasoning quota is temporarily busy. Try again shortly.", 429);
