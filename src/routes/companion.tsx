@@ -7,17 +7,20 @@ import { storage } from "@/lib/storage";
 export const Route=createFileRoute("/companion")({component:Companion});
 type RecognitionEvent={results:ArrayLike<{0:{transcript:string}}>};type Recognition={continuous:boolean;interimResults:boolean;lang:string;start():void;stop():void;abort():void;onresult:((e:RecognitionEvent)=>void)|null;onend:(()=>void)|null;onerror:(()=>void)|null};type RecognitionCtor=new()=>Recognition;
 type WakeStatus="starting"|"ready"|"error"|"unsupported"|"disabled"|"stopped"|"listening-local";
-type DesktopBridge={isDesktop?:boolean;onWakeWord?:(cb:()=>void)=>void|(()=>void);getWakeStatus?:()=>Promise<WakeStatus>;onWakeStatus?:(cb:(s:WakeStatus)=>void)=>void|(()=>void);localTranscribe?:()=>Promise<string>};
+type DesktopBridge={isDesktop?:boolean;onWakeWord?:(cb:()=>void)=>void|(()=>void);getWakeStatus?:()=>Promise<WakeStatus>;onWakeStatus?:(cb:(s:WakeStatus)=>void)=>void|(()=>void);localTranscribe?:()=>Promise<string>;localSpeak?:(text:string)=>Promise<boolean>;stopLocalSpeech?:()=>Promise<boolean>};
 function Companion(){
  const{readAloud,startListening,ask,robotState,level,stage,statusText}=useVoiceSession();const recognitionRef=useRef<Recognition|null>(null),stageRef=useRef(stage),activatingRef=useRef(false);const[wakeAvailable,setWakeAvailable]=useState(true),[wakeActive,setWakeActive]=useState(false),[nativeWakeStatus,setNativeWakeStatus]=useState<WakeStatus>("starting");useEffect(()=>{stageRef.current=stage;},[stage]);
  const activate=useCallback(async()=>{if(activatingRef.current||!["idle","answered","error"].includes(stageRef.current))return;activatingRef.current=true;recognitionRef.current?.stop();const bridge=(window as typeof window&{damiDesktop?:DesktopBridge}).damiDesktop;
   try{
-   // The greeting must never depend on Sahara. Start it without blocking microphone activation.
-   void readAloud("How can I help you today?");
    if(bridge?.isDesktop&&bridge.localTranscribe){
+    // Desktop activation is completely independent of Sahara: local greeting + local STT.
+    if(bridge.localSpeak){try{await bridge.localSpeak("How can I help you today?");}catch{void readAloud("How can I help you today?");}}else void readAloud("How can I help you today?");
     try{const text=await bridge.localTranscribe();if(text?.trim())await ask(text.trim());else throw new Error("I didn't hear a clear question.");}
     catch(err){console.warn("Local desktop speech fallback unavailable",err);await startListening();}
-   }else await startListening();
+   }else{
+    void readAloud("How can I help you today?");
+    await startListening();
+   }
   }finally{activatingRef.current=false;}
  },[ask,readAloud,startListening]);
  useEffect(()=>{const bridge=(window as typeof window&{damiDesktop?:DesktopBridge}).damiDesktop;if(!bridge?.isDesktop)return;if(!storage.getSettings().wakeWordEnabled){setWakeAvailable(false);setWakeActive(false);setNativeWakeStatus("disabled");return;}let wc:void|(()=>void),sc:void|(()=>void),cancelled=false;setWakeAvailable(true);if(bridge.onWakeWord)wc=bridge.onWakeWord(()=>void activate());if(bridge.onWakeStatus)sc=bridge.onWakeStatus(s=>{setNativeWakeStatus(s);setWakeActive(s==="ready");setWakeAvailable(!["error","unsupported","stopped"].includes(s));});if(bridge.getWakeStatus)void bridge.getWakeStatus().then(s=>{if(cancelled)return;setNativeWakeStatus(s);setWakeActive(s==="ready");setWakeAvailable(!["error","unsupported","stopped"].includes(s));}).catch(()=>{if(!cancelled){setNativeWakeStatus("error");setWakeActive(false);setWakeAvailable(false);}});return()=>{cancelled=true;if(typeof wc==="function")wc();if(typeof sc==="function")sc();};},[activate]);
