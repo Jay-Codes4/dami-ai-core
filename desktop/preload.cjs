@@ -6,5 +6,10 @@ contextBridge.exposeInMainWorld("damiDesktop", {
   setLaunchAtStartup: (enabled) => ipcRenderer.invoke("dami:set-launch-at-startup", enabled),
   show: () => ipcRenderer.invoke("dami:show"),
   hide: () => ipcRenderer.invoke("dami:hide"),
+  onWakeWord: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("dami:wake-word", listener);
+    return () => ipcRenderer.removeListener("dami:wake-word", listener);
+  },
   isDesktop: true,
 });
