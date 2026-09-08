@@ -17,6 +17,11 @@ export interface SpeechHandle {
   ended: Promise<void>;
 }
 
+export const prepareAudioPlayback = createClientOnlyFn(async (): Promise<void> => {
+  const mod = await import("./tts.client");
+  await mod.prepareAudioPlayback();
+});
+
 export const startRecording = createClientOnlyFn(
   async (maxSeconds: number): Promise<Recorder> => {
     const mod = await import("./stt.client");
