@@ -9,6 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STORAGE_EVENT, storage } from "@/lib/storage";
 import type { ResearchSession } from "@/lib/types";
 
+const WINDOWS_DOWNLOAD =
+  "https://github.com/Jay-Codes4/dami-ai-core/releases/latest/download/Dami-Setup.exe";
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
@@ -73,7 +76,10 @@ function Home() {
             Keep Dami floating on your desktop and say “Hey Dami” when you need help. She wakes, listens to your question and brings the legal answer back without making you open the browser first.
           </p>
         </div>
-        <Button asChild size="lg" className="mt-5 shrink-0 md:mt-0"><Link to="/desktop"><Download className="mr-2 h-5 w-5" /> Dami Desktop</Link></Button>
+        <div className="mt-5 flex shrink-0 flex-wrap gap-2 md:mt-0">
+          <Button asChild size="lg"><a href={WINDOWS_DOWNLOAD}><Download className="mr-2 h-5 w-5" /> Install for Windows</a></Button>
+          <Button asChild size="lg" variant="outline"><Link to="/desktop">Learn more</Link></Button>
+        </div>
       </section>
 
       <section className="mt-14 grid gap-4 md:grid-cols-3">
