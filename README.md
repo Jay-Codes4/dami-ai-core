@@ -39,21 +39,23 @@ Current launch language set: English, Akan↔English, Yoruba↔English, Swahili�
 - Voice states: listening → transcribing → researching → speaking
 - Source-grounded legal answers with jurisdiction awareness
 
-The Sahara streaming gateway is implemented according to the session flow: connect, wait for `SESSION_CREATED`, stream audio chunks, commit, and receive the final transcript. At the time of this README update, the competition Sahara account reports `QUOTA_EXCEEDED` with a zero credit balance, so final Sahara voice/benchmark execution is pending credit restoration rather than being represented with invented results.
+The Sahara streaming gateway follows the documented session flow: connect, wait for `SESSION_CREATED`, stream audio chunks, commit, and receive the final transcript.
 
 ## Benchmark Results
 
 The challenge requires code-switched ASR benchmarking. Dami's reproducible framework is in [`benchmark/`](benchmark/).
 
-The final comparison is designed for Sahara plus three other speech models on identical audio. It records WER, CER, legal-term accuracy, code-switch token accuracy, latency, language pair, accent/country, device, and noise condition.
+The comparison is designed for Sahara plus three other speech models on identical audio. It records WER, CER, legal-term accuracy, code-switch token accuracy, latency, language pair, accent/country, device, and noise condition.
 
-Run scoring with:
+Intron credits have been restored, so the Sahara execution path is ready. Actual benchmark rows remain empty until permitted test audio is added to `benchmark/manifest.csv` and the models are run; no result is estimated or fabricated.
+
+Run a Sahara smoke test with:
 
 ```bash
+$env:INTRON_API_KEY="your-key"
+python benchmark/run_sahara.py --limit 3
 python benchmark/score.py benchmark/results.csv
 ```
-
-`benchmark/results.csv` intentionally contains no fabricated scores. Actual model outputs are entered only after each model is run against the same permitted test set.
 
 ## Responsible AI
 
@@ -71,7 +73,9 @@ Dami's submission approach covers privacy and consent, legal safety, source inte
 - [x] Code and technical documentation
 - [x] Reproducible benchmark framework
 - [x] Responsible AI note
-- [ ] Populate measured benchmark results after model runs / Sahara credit restoration
+- [x] Sahara credits restored / benchmark runner ready
+- [ ] Add permitted code-switched benchmark audio + reference transcripts
+- [ ] Populate measured results for Sahara + three comparison models
 - [ ] Record final short prototype demo video
 
 ## Repository Map
@@ -81,7 +85,7 @@ api/                 server-side speech endpoints
 voice-gateway/       Sahara streaming WebSocket gateway
 desktop/             Electron desktop companion
 src/                 Dami web application and legal agent
-benchmark/           benchmark manifest, result schema and scorer
+benchmark/           benchmark manifest, model runners, result schema and scorer
 RESPONSIBLE_AI.md    privacy, consent, safety and responsible-use note
 ```
 

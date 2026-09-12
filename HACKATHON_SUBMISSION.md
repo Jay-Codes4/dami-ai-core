@@ -18,11 +18,11 @@ The web prototype uses Sahara for the challenge speech path. The Windows compani
 
 0:20–0:35 — Product: introduce Dami and explain that voice triggers research, reasoning, citations and a spoken answer.
 
-0:35–1:25 — Live workflow: speak one concise legal question. Show listening/transcription, research, answer and citations. Use Sahara if credits are available; do not disguise a fallback as Sahara.
+0:35–1:25 — Live workflow: speak one concise legal question. Show listening/transcription, research, answer and citations. Use Sahara for the challenge path; do not disguise a fallback as Sahara.
 
 1:25–1:50 — Desktop companion: show Dami on the Windows desktop. Open another application so the avatar disappears. Say "Hey Dami" and show that the background assistant can still respond without blocking the app.
 
-1:50–2:15 — Benchmark: show Sahara and comparison-model WER/CER results only after they have been measured on the same audio. Mention language pair, accent/country and recording conditions.
+1:50–2:15 — Benchmark: show measured Sahara and comparison-model WER/CER results on identical audio. Mention language pair, accent/country and recording conditions.
 
 2:15–2:35 — Responsible AI: explain that Dami is legal research assistance, not a lawyer; it exposes sources, communicates uncertainty and minimizes data.
 
@@ -39,12 +39,14 @@ Technical summary: React + TypeScript + TanStack Start; Electron desktop compani
 
 Responsible AI: see RESPONSIBLE_AI.md.
 
-Benchmark: see benchmark/. Results must remain empty until measured from actual model output.
+Benchmark: see benchmark/. Sahara credits are restored and the batch runner is ready. Results remain empty until real model outputs are measured on permitted audio.
 
 ## Final human-input checklist
-- [ ] Restore/obtain Sahara credits and verify a real Sahara voice run.
+- [x] Restore/obtain Sahara credits.
+- [x] Add a repeatable Sahara v2.5 batch benchmark runner.
+- [ ] Verify a real Sahara voice run with the restored credits.
 - [ ] Record or select consented/permitted code-switched benchmark audio.
-- [ ] Run Sahara and comparison ASR models on identical audio and populate benchmark/results.csv.
+- [ ] Run Sahara and at least three comparison ASR models on identical audio and populate benchmark/results.csv.
 - [ ] Record the 2–3 minute demo video.
 - [ ] Add the demo video URL to this file and README.
 - [ ] Submit the final challenge form before the deadline.

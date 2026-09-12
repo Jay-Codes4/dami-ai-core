@@ -1,1 +1,1 @@
-sample_id,audio_path,reference_transcript,language_pair,domain,accent_country,device_type,noise_condition,consent_license_note
+sample_id,audio_path,reference_transcript,language_pair,domain,accent_country,device_type,noise_condition,consent_license_note,legal_terms,code_switch_tokens
