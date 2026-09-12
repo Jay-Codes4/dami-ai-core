@@ -36,8 +36,10 @@ export const prepareAudioPlayback = createClientOnlyFn(async (): Promise<void> =
 
 export const startRecording = createClientOnlyFn(
   async (maxSeconds: number, language = "en-NG"): Promise<Recorder> => {
-    const tts = await import("./tts.client");
-    await tts.prepareAudioPlayback().catch(() => undefined);
+    // STT must be able to start independently of text-to-speech.
+    // A previous implementation tried to call a non-existent
+    // tts.prepareAudioPlayback() here, which threw before getUserMedia()
+    // could ever open the microphone.
     const mod = await import("./stt.client");
     return mod.startRecording(maxSeconds, language);
   },
