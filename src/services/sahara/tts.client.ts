@@ -135,7 +135,7 @@ async function requestSahara(text: string, o: VoiceOptions) {
     // caused healthy female voice requests to fall back to a local system voice.
     timer = setTimeout(() => controller.abort(), 7000);
   try {
-    const response = await fetch("/api/sahara-tts", {
+    const response = await fetch("/voice/tts", {
       method: "POST",
       signal: controller.signal,
       headers: { "Content-Type": "application/json" },
