@@ -15,8 +15,9 @@ Dami Desktop supports 64-bit Windows 10 and Windows 11. It needs an internet con
 
 - Wait until Dami is ready, then say **“Hey Dami”** and ask one legal question naturally.
 - You can also single-click or double-click the avatar and begin speaking immediately after the listening cue.
+- While Dami is speaking, click her once to interrupt and ask a follow-up immediately.
 - Dami stops listening after a short silence, transcribes the question with Sahara, researches the answer, and replies using her female voice.
-- Dami remains available from the system tray. Right-click the tray icon to show, hide, or quit Dami.
+- Dami remains available from the system tray. Right-click the tray icon to talk, pause or enable **Hey Dami**, show, hide, or quit Dami.
 
 ## If the microphone or wake phrase does not work
 
