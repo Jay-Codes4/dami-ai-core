@@ -38,11 +38,12 @@ export const STAGE_LABEL: Record<VoiceStage, string> = {
   error: "Something went wrong.",
 };
 const END_OF_SPEECH_SILENCE_MS = 650,
+  NO_SPEECH_TIMEOUT_MS = 6500,
   LISTENING_GRACE_MS = 280,
   SPEECH_CONFIRM_MS = 90,
-  MIN_SPEECH_THRESHOLD = 0.032,
-  NOISE_MULTIPLIER = 2,
-  NOISE_MARGIN = 0.016;
+  MIN_SPEECH_THRESHOLD = 0.022,
+  NOISE_MULTIPLIER = 1.8,
+  NOISE_MARGIN = 0.012;
 
 export function useVoiceSession() {
   const [stage, setStage] = useState<VoiceStage>("welcome"),
@@ -307,7 +308,10 @@ export function useVoiceSession() {
           currentLevel = currentRecorder.level();
         setLevel(currentLevel);
         const live = currentRecorder.transcript();
-        if (live) setPartial(live);
+        if (live) {
+          setPartial(live);
+          speechDetected = true;
+        }
         if (now - startedAt < LISTENING_GRACE_MS) {
           noiseFloor = Math.min(0.035, noiseFloor * 0.8 + currentLevel * 0.2);
           if (currentLevel >= 0.08) speechDetected = true;
@@ -326,6 +330,15 @@ export function useVoiceSession() {
         }
         speechStartedAt = null;
         if (!speechDetected) {
+          if (now - startedAt >= NO_SPEECH_TIMEOUT_MS) {
+            autoStoppingRef.current = true;
+            recorderRef.current = null;
+            currentRecorder.cancel();
+            stopLevelMeter();
+            void playListeningEndCue();
+            setStage("idle");
+            return;
+          }
           noiseFloor = Math.min(0.035, noiseFloor * 0.96 + currentLevel * 0.04);
           return;
         }
