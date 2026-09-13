@@ -17,6 +17,10 @@ export interface DamiDesktopBridge {
   setFloatingAvatarEnabled(enabled: boolean): Promise<boolean>;
   show(): Promise<unknown>;
   hide(): Promise<unknown>;
+  getWakeStatus?(): Promise<string>;
+  rendererReady?(): Promise<boolean>;
+  beginVoiceTurn?(activationId?: string): Promise<boolean>;
+  endVoiceTurn?(): Promise<boolean>;
 }
 
 declare global {

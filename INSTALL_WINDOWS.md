@@ -13,12 +13,14 @@ Dami Desktop supports 64-bit Windows 10 and Windows 11. It needs an internet con
 
 ## Use Dami
 
-- Wait until Dami is ready. Say **“Hey Dami”** by itself; the acknowledgement sound confirms the wake phrase, Dami asks **“How can I help you today?”**, and the rising listening cue tells you when to ask your question.
+- Wait until the label below the avatar says **Click me · or say “Hey Dami”**.
+- Say **“Hey Dami”** by itself. The acknowledgement sound confirms the wake phrase; the rising listening cue means the microphone is open and you can ask your question immediately.
 - You can also say the wake phrase and request together, for example: **“Hey Dami, give me five marriage laws in Nigeria.”** Dami acknowledges and processes the captured request without asking you to repeat it.
-- You can also single-click or double-click the avatar and begin speaking immediately after the listening cue.
+- You can also **single-click or double-click the avatar** and begin speaking immediately after the listening cue. This is a fully supported activation method, not an error state.
 - While Dami is speaking, click her once to interrupt and ask a follow-up immediately.
 - Dami stops listening after a short silence, transcribes the question with Sahara, researches the answer, and replies using her female voice.
 - A descending sound confirms that recording has ended and Dami has started transcribing and researching.
+- The label below the avatar shows **Dami is listening**, **Dami is transcribing**, **Dami is researching**, or **Dami is speaking**, so a judge never has to guess whether Dami is working.
 - Dami remains available from the system tray. Right-click the tray icon to talk, pause or enable **Hey Dami**, show, hide, or quit Dami.
 
 ## If the microphone or wake phrase does not work
@@ -26,8 +28,9 @@ Dami Desktop supports 64-bit Windows 10 and Windows 11. It needs an internet con
 1. Open **Windows Settings → Privacy & security → Microphone**.
 2. Turn on **Microphone access** and **Let desktop apps access your microphone**.
 3. Make sure the intended microphone is the default input device under **Settings → System → Sound → Input**.
-4. Close other apps that may be holding the microphone, then quit and reopen Dami from the Start menu.
-5. Speak clearly and try **“Hey Dami”**, **“Dami”**, or click the avatar.
+4. Under **Settings → Time & language → Language & region**, open your English language options and install the **Speech** feature if it is missing. Dami's private wake phrase listener uses the native Windows English recognizer; Sahara handles the actual legal-question transcription.
+5. Close other apps that may be holding the microphone, then quit and reopen Dami from the Start menu.
+6. Wait for **Click me · or say “Hey Dami”**, speak clearly, and try **“Hey Dami”**. You can always click or double-click the avatar to run the same voice workflow.
 
 ## Remove an older build
 
@@ -38,7 +41,7 @@ If activation fails, right-click the tray icon and choose **Open Dami diagnostic
 ## Judge verification checklist
 
 1. Launch Dami and confirm the floating avatar appears.
-2. Say **“Hey Dami”** and confirm the listening animation begins without clicking.
+2. Wait for **Click me · or say “Hey Dami”**, then say **“Hey Dami”** and confirm the rising cue and **Dami is listening** state appear without clicking.
 3. Ask a jurisdiction-specific legal question.
-4. Confirm Dami transcribes it, produces a sourced answer, and speaks using the female voice.
-5. Repeat using a single-click or double-click on the avatar.
+4. Confirm the visible state advances through transcription and research, then Dami produces a complete sourced answer and speaks it using the female voice.
+5. Repeat using a single-click or double-click on the avatar and confirm the same start/end cues.

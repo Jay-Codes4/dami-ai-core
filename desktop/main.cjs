@@ -2,9 +2,12 @@ const { app, BrowserWindow, ipcMain, screen, shell, session, Tray, Menu } = requ
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { parseWakeUtterance } = require("./wake.cjs");
 
-const WINDOW_WIDTH = 196,
-  WINDOW_HEIGHT = 196,
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
+const WINDOW_WIDTH = 236,
+  WINDOW_HEIGHT = 238,
   EDGE_GAP = 14;
 const DEFAULT_WEB_URL = "https://dami-ai-core.vercel.app";
 let win = null,
@@ -16,7 +19,10 @@ let win = null,
   wakeStatus = "starting",
   isQuitting = false,
   isDesktopForeground = true,
-  isVoiceTurnActive = false;
+  isVoiceTurnActive = false,
+  rendererVoiceReady = false,
+  pendingActivation = null,
+  activationSequence = 0;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 
@@ -96,6 +102,31 @@ function setWakeStatus(s) {
   wakeStatus = s;
   if (win && !win.isDestroyed()) win.webContents.send("dami:wake-status", s);
 }
+function sendPendingActivation() {
+  if (!rendererVoiceReady || !pendingActivation || !win || win.isDestroyed()) return;
+  win.webContents.send(pendingActivation.channel, pendingActivation.payload);
+  logDesktop("activation-dispatched", {
+    id: pendingActivation.payload.activationId,
+    source: pendingActivation.payload.source,
+  });
+}
+function queueActivation(channel, payload = {}) {
+  const activationId = `${Date.now()}-${++activationSequence}`;
+  pendingActivation = {
+    channel,
+    payload: { ...payload, activationId },
+  };
+  sendPendingActivation();
+  return activationId;
+}
+function acknowledgeActivation(activationId) {
+  if (!pendingActivation || pendingActivation.payload.activationId !== activationId) return;
+  logDesktop("activation-acknowledged", {
+    id: activationId,
+    source: pendingActivation.payload.source,
+  });
+  pendingActivation = null;
+}
 function stopWakeListener() {
   if (!wakeProcess) return;
   try {
@@ -103,8 +134,12 @@ function stopWakeListener() {
   } catch {}
   wakeProcess = null;
 }
-function beginVoiceTurn() {
-  logDesktop("voice-turn-begin", { wakeStatus });
+function beginVoiceTurn(source = "renderer") {
+  if (isVoiceTurnActive) {
+    logDesktop("voice-turn-already-active", { source, wakeStatus });
+    return;
+  }
+  logDesktop("voice-turn-begin", { source, wakeStatus });
   isVoiceTurnActive = true;
   if (wakeResumeTimer) clearTimeout(wakeResumeTimer);
   stopWakeListener();
@@ -116,6 +151,7 @@ function beginVoiceTurn() {
 function endVoiceTurn() {
   logDesktop("voice-turn-end", { wakeStatus });
   isVoiceTurnActive = false;
+  pendingActivation = null;
   if (wakeResumeTimer) clearTimeout(wakeResumeTimer);
   wakeResumeTimer = null;
   if (!isQuitting && readSettings().wakeWordEnabled !== false) startWakeListener();
@@ -239,11 +275,10 @@ function yarnGptPaths() {
     root,
     python: path.join(root, ".venv", "Scripts", "python.exe"),
     ready: path.join(root, "READY"),
-    worker: path.join(__dirname, "voice", "yarngpt_speak.py"),
+    worker: voiceResource("yarngpt_speak.py"),
   };
 }
 function speakWithWindows(text) {
-  const safe = Buffer.from(String(text || ""), "utf8").toString("base64");
   const script = [
     "$ErrorActionPreference='Stop'",
     "Add-Type -AssemblyName System.Speech",
@@ -254,7 +289,8 @@ function speakWithWindows(text) {
     "if(-not $preferred){$s.Dispose();throw 'No female Windows voice is installed'}",
     "$s.SelectVoice($preferred.VoiceInfo.Name)",
     "$s.Rate=0;$s.Volume=100",
-    "$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + safe + "'))",
+    "$t=[Console]::In.ReadToEnd()",
+    "if([string]::IsNullOrWhiteSpace($t)){$s.Dispose();throw 'No speech text was supplied'}",
     "$s.Speak($t)",
     "$s.Dispose()",
   ].join("; ");
@@ -283,6 +319,7 @@ function speakWithWindows(text) {
       if (code === 0) resolve(true);
       else reject(new Error(err.trim() || "Windows local voice failed"));
     });
+    localSpeechProcess.stdin.end(String(text || ""), "utf8");
   });
 }
 function speakWithYarnGpt(text) {
@@ -372,8 +409,13 @@ async function localTranscribe() {
     if (!line) throw new Error("No local transcript was produced");
     return line.slice(16).trim();
   } finally {
-    if (!isQuitting) setTimeout(() => startWakeListener(), 350);
+    if (!isQuitting && !isVoiceTurnActive) setTimeout(() => startWakeListener(), 350);
   }
+}
+function voiceResource(name) {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "voice", name)
+    : path.join(__dirname, "voice", name);
 }
 function startWakeListener() {
   stopWakeListener();
@@ -385,35 +427,16 @@ function startWakeListener() {
     setWakeStatus("disabled");
     return;
   }
+  if (isVoiceTurnActive) {
+    setWakeStatus("listening-local");
+    return;
+  }
   setWakeStatus("starting");
   logDesktop("wake-starting");
-  const script = [
-    "$ErrorActionPreference='Stop'",
-    "try {",
-    "Add-Type -AssemblyName System.Speech",
-    "$installed=[System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers()",
-    "if(-not $installed -or $installed.Count -lt 1){throw 'No Windows speech recognizer is installed'}",
-    "$info=$installed | Where-Object {$_.Culture.TwoLetterISOLanguageName -eq 'en'} | Select-Object -First 1",
-    "if(-not $info){$info=$installed | Select-Object -First 1}",
-    "$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine($info.Id)",
-    "$choices=New-Object System.Speech.Recognition.Choices",
-    "$choices.Add('hey dami');$choices.Add('hey dummy');$choices.Add('hey demi');$choices.Add('hey dammy');$choices.Add('hey darmi');$choices.Add('okay dami');$choices.Add('hi dami');$choices.Add('dami')",
-    "$wakeBuilder=New-Object System.Speech.Recognition.GrammarBuilder($choices)",
-    "$wakeBuilder.Culture=$info.Culture",
-    "$wakeGrammar=New-Object System.Speech.Recognition.Grammar($wakeBuilder)",
-    "$commandBuilder=New-Object System.Speech.Recognition.GrammarBuilder($choices)",
-    "$commandBuilder.Culture=$info.Culture",
-    "$commandBuilder.AppendDictation()",
-    "$commandGrammar=New-Object System.Speech.Recognition.Grammar($commandBuilder)",
-    "$r.LoadGrammar($wakeGrammar);$r.LoadGrammar($commandGrammar)",
-    "$r.SetInputToDefaultAudioDevice()",
-    "[Console]::Out.WriteLine('DAMI_READY');[Console]::Out.Flush()",
-    "while($true){$result=$r.Recognize([TimeSpan]::FromMilliseconds(900));if($null -ne $result -and $result.Confidence -ge .18){$text64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($result.Text));$audio64='';if($null -ne $result.Audio){$ms=New-Object IO.MemoryStream;$result.Audio.WriteToWaveStream($ms);$audio64=[Convert]::ToBase64String($ms.ToArray());$ms.Dispose()};[Console]::Out.WriteLine('DAMI_WAKE:'+$text64+':'+$audio64);[Console]::Out.Flush()}}",
-    "} catch {[Console]::Out.WriteLine('DAMI_ERROR:'+$_.Exception.Message);[Console]::Out.Flush();exit 1}",
-  ].join("; ");
+  const scriptPath = voiceResource("wake-listener.ps1");
   wakeProcess = spawn(
     "powershell.exe",
-    ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
     { windowsHide: true },
   );
   let b = "";
@@ -434,21 +457,18 @@ function startWakeListener() {
             .toString("utf8")
             .trim();
         } catch {}
-        const match = heard.match(/(?:hey|hi|okay)\s+(?:dami|dummy|demi|dammy|darmi)\b|^dami\b/i);
-        if (!match) continue;
-        const command = heard
-          .slice((match.index || 0) + match[0].length)
-          .replace(/^[,.:;\s-]+/, "")
-          .trim();
+        const wake = parseWakeUtterance(heard);
+        if (!wake) continue;
+        const command = wake.command;
         const audioBase64 = command ? parts[2] || "" : "";
         logDesktop("wake-recognized", {
           hasCommand: Boolean(command),
           hasAudio: Boolean(audioBase64),
         });
-        beginVoiceTurn();
+        beginVoiceTurn("wake-word");
         shell.beep();
         win?.showInactive();
-        win?.webContents.send("dami:wake-word", { command, audioBase64 });
+        queueActivation("dami:wake-word", { source: "wake-word", command, audioBase64 });
       } else if (line.startsWith("DAMI_ERROR:")) {
         console.error(line);
         logDesktop("wake-error", { message: line.slice(11) });
@@ -456,7 +476,11 @@ function startWakeListener() {
       }
     }
   });
-  wakeProcess.stderr.on("data", (c) => console.error("Wake listener stderr", c.toString()));
+  wakeProcess.stderr.on("data", (c) => {
+    const message = c.toString().trim().slice(0, 1000);
+    console.error("Wake listener stderr", message);
+    if (message) logDesktop("wake-stderr", { message });
+  });
   wakeProcess.on("error", (e) => {
     console.error(e);
     logDesktop("wake-process-error", { message: e?.message || String(e) });
@@ -464,6 +488,7 @@ function startWakeListener() {
   });
   wakeProcess.on("exit", (code) => {
     wakeProcess = null;
+    logDesktop("wake-exit", { code, wakeStatus });
     if (
       !isQuitting &&
       !String(wakeStatus).startsWith("listening") &&
@@ -483,9 +508,9 @@ async function createTray() {
         {
           label: "Talk with Dami",
           click: () => {
-            beginVoiceTurn();
+            beginVoiceTurn("tray");
             win?.showInactive();
-            win?.webContents.send("dami:talk-request");
+            queueActivation("dami:talk-request", { source: "tray" });
           },
         },
         {
@@ -571,15 +596,20 @@ function createWindow() {
     ? process.env.DAMI_DESKTOP_URL || s.webUrl || DEFAULT_WEB_URL
     : process.env.DAMI_DESKTOP_URL || "http://localhost:3000";
   void win.loadURL(`${base.replace(/\/$/, "")}/companion?desktop=1`);
-  win.webContents.on("did-finish-load", () =>
-    logDesktop("renderer-loaded", { url: win?.webContents.getURL() }),
-  );
+  win.webContents.on("did-start-loading", () => {
+    rendererVoiceReady = false;
+  });
+  win.webContents.on("did-finish-load", () => {
+    logDesktop("renderer-loaded", { url: win?.webContents.getURL() });
+    setWakeStatus(wakeStatus);
+  });
   win.webContents.on("did-fail-load", (_event, code, description, url) =>
     logDesktop("renderer-load-failed", { code, description, url }),
   );
-  win.webContents.on("render-process-gone", (_event, details) =>
-    logDesktop("renderer-process-gone", details),
-  );
+  win.webContents.on("render-process-gone", (_event, details) => {
+    rendererVoiceReady = false;
+    logDesktop("renderer-process-gone", details);
+  });
   dockWindow(s.dock);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://")) void shell.openExternal(url);
@@ -651,8 +681,16 @@ if (hasSingleInstanceLock)
       };
     });
     ipcMain.handle("dami:get-wake-status", () => wakeStatus);
-    ipcMain.handle("dami:begin-voice-turn", () => {
-      beginVoiceTurn();
+    ipcMain.handle("dami:renderer-ready", () => {
+      rendererVoiceReady = true;
+      logDesktop("renderer-voice-ready", { hasPendingActivation: Boolean(pendingActivation) });
+      setWakeStatus(wakeStatus);
+      sendPendingActivation();
+      return true;
+    });
+    ipcMain.handle("dami:begin-voice-turn", (_event, activationId) => {
+      if (activationId) acknowledgeActivation(String(activationId));
+      beginVoiceTurn(activationId ? "activation" : "renderer");
       return true;
     });
     ipcMain.handle("dami:voice-stage", (_event, stage, error) => {
