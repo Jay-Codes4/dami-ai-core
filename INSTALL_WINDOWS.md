@@ -29,7 +29,9 @@ Dami Desktop supports 64-bit Windows 10 and Windows 11. It needs an internet con
 
 ## Remove an older build
 
-If an older Dami version is installed, uninstall it from **Settings → Apps → Installed apps**, then install the newest `Dami-Setup.exe`. Saved settings are retained unless you remove Dami's app data separately.
+Before upgrading, right-click Dami's system-tray icon and choose **Quit Dami**. If an older Dami version is installed, uninstall it from **Settings → Apps → Installed apps**, then install the newest `Dami-Setup.exe`. The installer also closes a stale Dami background process automatically. Saved settings are retained unless you remove Dami's app data separately.
+
+If activation fails, right-click the tray icon and choose **Open Dami diagnostics**. The log records activation stages and errors without storing microphone audio, legal questions, API keys, or other credentials.
 
 ## Judge verification checklist
 
