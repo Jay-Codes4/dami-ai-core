@@ -157,7 +157,9 @@ export function useVoiceSession() {
   }, []);
   const ask = useCallback(
     async (text: string) => {
-      const trimmed = text.trim();
+      // Voice providers can occasionally repeat a segment. Keep the research
+      // RPC inside its documented contract instead of surfacing raw Zod errors.
+      const trimmed = text.trim().slice(0, 1200).trim();
       if (trimmed.length < 3) {
         setError("Give me a little more to work with.");
         setStage("error");

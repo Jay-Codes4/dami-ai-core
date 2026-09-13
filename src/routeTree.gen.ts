@@ -11,9 +11,16 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AskRouteImport } from './routes/ask'
+import { Route as CompanionRouteImport } from './routes/companion'
+import { Route as DesktopRouteImport } from './routes/desktop'
 import { Route as DocumentsRouteImport } from './routes/documents'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResearchRouteImport } from './routes/research'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SourcesRouteImport } from './routes/sources'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as VoiceSttRouteImport } from './routes/voice.stt'
+import { Route as VoiceTtsRouteImport } from './routes/voice.tts'
 import { Route as ApiSaharaSttRouteImport } from './routes/api/sahara.stt'
 import { Route as ApiSaharaTtsRouteImport } from './routes/api/sahara.tts'
 
@@ -27,9 +34,24 @@ const AskRoute = AskRouteImport.update({
   path: '/ask',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CompanionRoute = CompanionRouteImport.update({
+  id: '/companion',
+  path: '/companion',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DesktopRoute = DesktopRouteImport.update({
+  id: '/desktop',
+  path: '/desktop',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocumentsRoute = DocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResearchRoute = ResearchRouteImport.update({
@@ -37,9 +59,29 @@ const ResearchRoute = ResearchRouteImport.update({
   path: '/research',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SourcesRoute = SourcesRouteImport.update({
   id: '/sources',
   path: '/sources',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VoiceSttRoute = VoiceSttRouteImport.update({
+  id: '/voice/stt',
+  path: '/voice/stt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VoiceTtsRoute = VoiceTtsRouteImport.update({
+  id: '/voice/tts',
+  path: '/voice/tts',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSaharaSttRoute = ApiSaharaSttRouteImport.update({
@@ -56,18 +98,32 @@ const ApiSaharaTtsRoute = ApiSaharaTtsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/companion': typeof CompanionRoute
+  '/desktop': typeof DesktopRoute
   '/documents': typeof DocumentsRoute
+  '/privacy': typeof PrivacyRoute
   '/research': typeof ResearchRoute
+  '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
+  '/terms': typeof TermsRoute
+  '/voice/stt': typeof VoiceSttRoute
+  '/voice/tts': typeof VoiceTtsRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/companion': typeof CompanionRoute
+  '/desktop': typeof DesktopRoute
   '/documents': typeof DocumentsRoute
+  '/privacy': typeof PrivacyRoute
   '/research': typeof ResearchRoute
+  '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
+  '/terms': typeof TermsRoute
+  '/voice/stt': typeof VoiceSttRoute
+  '/voice/tts': typeof VoiceTtsRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
@@ -75,9 +131,16 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/companion': typeof CompanionRoute
+  '/desktop': typeof DesktopRoute
   '/documents': typeof DocumentsRoute
+  '/privacy': typeof PrivacyRoute
   '/research': typeof ResearchRoute
+  '/settings': typeof SettingsRoute
   '/sources': typeof SourcesRoute
+  '/terms': typeof TermsRoute
+  '/voice/stt': typeof VoiceSttRoute
+  '/voice/tts': typeof VoiceTtsRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
@@ -86,27 +149,48 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/ask'
+    | '/companion'
+    | '/desktop'
     | '/documents'
+    | '/privacy'
     | '/research'
+    | '/settings'
     | '/sources'
+    | '/terms'
+    | '/voice/stt'
+    | '/voice/tts'
     | '/api/sahara/stt'
     | '/api/sahara/tts'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/ask'
+    | '/companion'
+    | '/desktop'
     | '/documents'
+    | '/privacy'
     | '/research'
+    | '/settings'
     | '/sources'
+    | '/terms'
+    | '/voice/stt'
+    | '/voice/tts'
     | '/api/sahara/stt'
     | '/api/sahara/tts'
   id:
     | '__root__'
     | '/'
     | '/ask'
+    | '/companion'
+    | '/desktop'
     | '/documents'
+    | '/privacy'
     | '/research'
+    | '/settings'
     | '/sources'
+    | '/terms'
+    | '/voice/stt'
+    | '/voice/tts'
     | '/api/sahara/stt'
     | '/api/sahara/tts'
   fileRoutesById: FileRoutesById
@@ -114,9 +198,16 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AskRoute: typeof AskRoute
+  CompanionRoute: typeof CompanionRoute
+  DesktopRoute: typeof DesktopRoute
   DocumentsRoute: typeof DocumentsRoute
+  PrivacyRoute: typeof PrivacyRoute
   ResearchRoute: typeof ResearchRoute
+  SettingsRoute: typeof SettingsRoute
   SourcesRoute: typeof SourcesRoute
+  TermsRoute: typeof TermsRoute
+  VoiceSttRoute: typeof VoiceSttRoute
+  VoiceTtsRoute: typeof VoiceTtsRoute
   ApiSaharaSttRoute: typeof ApiSaharaSttRoute
   ApiSaharaTtsRoute: typeof ApiSaharaTtsRoute
 }
@@ -137,11 +228,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AskRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/companion': {
+      id: '/companion'
+      path: '/companion'
+      fullPath: '/companion'
+      preLoaderRoute: typeof CompanionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/desktop': {
+      id: '/desktop'
+      path: '/desktop'
+      fullPath: '/desktop'
+      preLoaderRoute: typeof DesktopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/documents': {
       id: '/documents'
       path: '/documents'
       fullPath: '/documents'
       preLoaderRoute: typeof DocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/research': {
@@ -151,11 +263,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sources': {
       id: '/sources'
       path: '/sources'
       fullPath: '/sources'
       preLoaderRoute: typeof SourcesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/voice/stt': {
+      id: '/voice/stt'
+      path: '/voice/stt'
+      fullPath: '/voice/stt'
+      preLoaderRoute: typeof VoiceSttRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/voice/tts': {
+      id: '/voice/tts'
+      path: '/voice/tts'
+      fullPath: '/voice/tts'
+      preLoaderRoute: typeof VoiceTtsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/sahara/stt': {
@@ -178,9 +318,16 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AskRoute: AskRoute,
+  CompanionRoute: CompanionRoute,
+  DesktopRoute: DesktopRoute,
   DocumentsRoute: DocumentsRoute,
+  PrivacyRoute: PrivacyRoute,
   ResearchRoute: ResearchRoute,
+  SettingsRoute: SettingsRoute,
   SourcesRoute: SourcesRoute,
+  TermsRoute: TermsRoute,
+  VoiceSttRoute: VoiceSttRoute,
+  VoiceTtsRoute: VoiceTtsRoute,
   ApiSaharaSttRoute: ApiSaharaSttRoute,
   ApiSaharaTtsRoute: ApiSaharaTtsRoute,
 }

@@ -15,6 +15,7 @@ export interface AudioCapture {
   extension: string;
   durationMs: number;
   transcript?: string;
+  partialTranscript?: string;
   streamed?: boolean;
 }
 export interface Recorder {
@@ -310,7 +311,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     const final = socketReady
       ? await Promise.race([
           finalPromise,
-          new Promise<string>((resolve) => setTimeout(() => resolve(committedTranscript), 1800)),
+          new Promise<string>((resolve) => setTimeout(() => resolve(committedTranscript), 700)),
         ])
       : "";
     try {
@@ -333,6 +334,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
       extension: "wav",
       durationMs: Date.now() - startedAt,
       transcript: committedTranscript,
+      partialTranscript: transcript.trim(),
       streamed: Boolean(committedTranscript),
     };
   };
@@ -382,16 +384,24 @@ async function saharaFinal(
       offset += 8 + size + (size % 2);
     }
   }
-  const response = await fetch("/api/sahara/stt", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      audioBase64: toBase64(pcm),
-      sampleRate,
-      language: options.language || "en",
-      codeSwitching: options.codeSwitching,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 8000);
+  let response: Response;
+  try {
+    response = await fetch("/voice/stt", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        audioBase64: toBase64(pcm),
+        sampleRate,
+        language: options.language || "en",
+        codeSwitching: options.codeSwitching,
+      }),
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
   const raw = await response.text();
   let payload: {
     text?: string;
@@ -416,25 +426,23 @@ async function saharaFinal(
   );
 }
 
-function isTemporarySaharaFailure(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return /language not available|wait 30 seconds|temporar|too many|429|503|connection|network|fetch/.test(
-    message,
-  );
-}
-
 export async function transcribeSamples(
   capture: AudioCapture,
   options: { language: string; codeSwitching: boolean; browserTranscript?: string },
 ): Promise<TranscriptionResult> {
   if (capture.streamed && capture.transcript?.trim())
     return { text: capture.transcript.trim(), durationMs: capture.durationMs, requestId: null };
+  // Sahara has already processed this text through the live stream. After the
+  // short commit window, prefer its stable partial over uploading the same turn.
+  const livePartial = capture.partialTranscript?.trim();
+  if (livePartial) return { text: livePartial, durationMs: capture.durationMs, requestId: null };
   try {
     return await saharaFinal(capture, options);
   } catch (error) {
-    if (!isTemporarySaharaFailure(error)) throw error;
-    // Reuse the captured audio once after a temporary Sahara allocation failure.
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    return saharaFinal(capture, options);
+    // Native Windows recognition is a last-resort resilience path for wake
+    // commands. Sahara is still attempted first, but Dami never strands a turn.
+    const fallback = options.browserTranscript?.trim().slice(0, 1200).trim();
+    if (fallback) return { text: fallback, durationMs: capture.durationMs, requestId: null };
+    throw error;
   }
 }
