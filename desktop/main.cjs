@@ -398,13 +398,17 @@ function startWakeListener() {
     "$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine($info.Id)",
     "$choices=New-Object System.Speech.Recognition.Choices",
     "$choices.Add('hey dami');$choices.Add('hey dummy');$choices.Add('hey demi');$choices.Add('hey dammy');$choices.Add('hey darmi');$choices.Add('okay dami');$choices.Add('hi dami');$choices.Add('dami')",
-    "$gb=New-Object System.Speech.Recognition.GrammarBuilder($choices)",
-    "$gb.Culture=$info.Culture",
-    "$g=New-Object System.Speech.Recognition.Grammar($gb)",
-    "$r.LoadGrammar($g)",
+    "$wakeBuilder=New-Object System.Speech.Recognition.GrammarBuilder($choices)",
+    "$wakeBuilder.Culture=$info.Culture",
+    "$wakeGrammar=New-Object System.Speech.Recognition.Grammar($wakeBuilder)",
+    "$commandBuilder=New-Object System.Speech.Recognition.GrammarBuilder($choices)",
+    "$commandBuilder.Culture=$info.Culture",
+    "$commandBuilder.AppendDictation()",
+    "$commandGrammar=New-Object System.Speech.Recognition.Grammar($commandBuilder)",
+    "$r.LoadGrammar($wakeGrammar);$r.LoadGrammar($commandGrammar)",
     "$r.SetInputToDefaultAudioDevice()",
     "[Console]::Out.WriteLine('DAMI_READY');[Console]::Out.Flush()",
-    "while($true){$result=$r.Recognize([TimeSpan]::FromMilliseconds(900));if($null -ne $result -and $result.Confidence -ge .18){[Console]::Out.WriteLine('DAMI_WAKE');[Console]::Out.Flush()}}",
+    "while($true){$result=$r.Recognize([TimeSpan]::FromMilliseconds(900));if($null -ne $result -and $result.Confidence -ge .18){$text64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($result.Text));$audio64='';if($null -ne $result.Audio){$ms=New-Object IO.MemoryStream;$result.Audio.WriteToWaveStream($ms);$audio64=[Convert]::ToBase64String($ms.ToArray());$ms.Dispose()};[Console]::Out.WriteLine('DAMI_WAKE:'+$text64+':'+$audio64);[Console]::Out.Flush()}}",
     "} catch {[Console]::Out.WriteLine('DAMI_ERROR:'+$_.Exception.Message);[Console]::Out.Flush();exit 1}",
   ].join("; ");
   wakeProcess = spawn(
@@ -422,12 +426,29 @@ function startWakeListener() {
       if (line === "DAMI_READY") {
         setWakeStatus("ready");
         logDesktop("wake-ready");
-      }
-      else if (line === "DAMI_WAKE") {
-        logDesktop("wake-recognized");
+      } else if (line.startsWith("DAMI_WAKE:")) {
+        const parts = line.split(":");
+        let heard = "";
+        try {
+          heard = Buffer.from(parts[1] || "", "base64")
+            .toString("utf8")
+            .trim();
+        } catch {}
+        const match = heard.match(/(?:hey|hi|okay)\s+(?:dami|dummy|demi|dammy|darmi)\b|^dami\b/i);
+        if (!match) continue;
+        const command = heard
+          .slice((match.index || 0) + match[0].length)
+          .replace(/^[,.:;\s-]+/, "")
+          .trim();
+        const audioBase64 = command ? parts[2] || "" : "";
+        logDesktop("wake-recognized", {
+          hasCommand: Boolean(command),
+          hasAudio: Boolean(audioBase64),
+        });
         beginVoiceTurn();
+        shell.beep();
         win?.showInactive();
-        win?.webContents.send("dami:wake-word");
+        win?.webContents.send("dami:wake-word", { command, audioBase64 });
       } else if (line.startsWith("DAMI_ERROR:")) {
         console.error(line);
         logDesktop("wake-error", { message: line.slice(11) });
@@ -468,7 +489,8 @@ async function createTray() {
           },
         },
         {
-          label: readSettings().wakeWordEnabled === false ? 'Enable "Hey Dami"' : 'Pause "Hey Dami"',
+          label:
+            readSettings().wakeWordEnabled === false ? 'Enable "Hey Dami"' : 'Pause "Hey Dami"',
           click: () => {
             const current = readSettings();
             const enabled = current.wakeWordEnabled === false;
@@ -549,7 +571,9 @@ function createWindow() {
     ? process.env.DAMI_DESKTOP_URL || s.webUrl || DEFAULT_WEB_URL
     : process.env.DAMI_DESKTOP_URL || "http://localhost:3000";
   void win.loadURL(`${base.replace(/\/$/, "")}/companion?desktop=1`);
-  win.webContents.on("did-finish-load", () => logDesktop("renderer-loaded", { url: win?.webContents.getURL() }));
+  win.webContents.on("did-finish-load", () =>
+    logDesktop("renderer-loaded", { url: win?.webContents.getURL() }),
+  );
   win.webContents.on("did-fail-load", (_event, code, description, url) =>
     logDesktop("renderer-load-failed", { code, description, url }),
   );
@@ -576,86 +600,89 @@ function createWindow() {
   });
   win.on("closed", () => (win = null));
 }
-if (hasSingleInstanceLock) app.on("second-instance", () => {
-  logDesktop("second-instance-blocked");
-  if (!win || win.isDestroyed()) return;
-  win.webContents.reloadIgnoringCache();
-  win.showInactive();
-});
+if (hasSingleInstanceLock)
+  app.on("second-instance", () => {
+    logDesktop("second-instance-blocked");
+    if (!win || win.isDestroyed()) return;
+    win.webContents.reloadIgnoringCache();
+    win.showInactive();
+  });
 
-if (hasSingleInstanceLock) app.whenReady().then(async () => {
-  configurePermissions();
-  ipcMain.handle("dami:get-dock", () => readSettings().dock);
-  ipcMain.handle("dami:set-dock", (_e, d) => {
-    if (!["top", "bottom"].includes(d)) throw new Error("Invalid dock position");
-    writeSettings({ ...readSettings(), dock: d });
-    dockWindow(d);
-    return d;
+if (hasSingleInstanceLock)
+  app.whenReady().then(async () => {
+    configurePermissions();
+    ipcMain.handle("dami:get-dock", () => readSettings().dock);
+    ipcMain.handle("dami:set-dock", (_e, d) => {
+      if (!["top", "bottom"].includes(d)) throw new Error("Invalid dock position");
+      writeSettings({ ...readSettings(), dock: d });
+      dockWindow(d);
+      return d;
+    });
+    ipcMain.handle("dami:set-launch-at-startup", (_e, v) => {
+      const s = { ...readSettings(), launchAtStartup: Boolean(v) };
+      writeSettings(s);
+      syncLoginItem(s);
+      return s.launchAtStartup;
+    });
+    ipcMain.handle("dami:set-wake-word-enabled", (_e, v) => {
+      const s = { ...readSettings(), wakeWordEnabled: Boolean(v) };
+      writeSettings(s);
+      if (s.wakeWordEnabled) startWakeListener();
+      else {
+        stopWakeListener();
+        setWakeStatus("disabled");
+      }
+      return s.wakeWordEnabled;
+    });
+    ipcMain.handle("dami:set-floating-avatar-enabled", (_e, v) => {
+      const s = { ...readSettings(), floatingAvatarEnabled: Boolean(v) };
+      writeSettings(s);
+      if (s.floatingAvatarEnabled && isDesktopForeground) win?.showInactive();
+      else win?.hide();
+      return s.floatingAvatarEnabled;
+    });
+    ipcMain.handle("dami:get-desktop-settings", () => {
+      const s = readSettings();
+      return {
+        desktopDock: s.dock,
+        wakeWordEnabled: s.wakeWordEnabled !== false,
+        floatingAvatarEnabled: s.floatingAvatarEnabled !== false,
+        launchAtStartup: s.launchAtStartup !== false,
+      };
+    });
+    ipcMain.handle("dami:get-wake-status", () => wakeStatus);
+    ipcMain.handle("dami:begin-voice-turn", () => {
+      beginVoiceTurn();
+      return true;
+    });
+    ipcMain.handle("dami:voice-stage", (_event, stage, error) => {
+      logDesktop("renderer-stage", { stage: String(stage || ""), error: String(error || "") });
+      return true;
+    });
+    ipcMain.handle("dami:end-voice-turn", () => {
+      endVoiceTurn();
+      return true;
+    });
+    ipcMain.handle("dami:local-transcribe", () => localTranscribe());
+    ipcMain.handle("dami:local-speak", (_e, text) => localSpeak(text));
+    ipcMain.handle("dami:stop-local-speech", () => {
+      stopLocalSpeech();
+      return true;
+    });
+    ipcMain.handle("dami:show", () => {
+      if (isDesktopForeground && readSettings().floatingAvatarEnabled !== false)
+        win?.showInactive();
+      return isDesktopForeground && readSettings().floatingAvatarEnabled !== false;
+    });
+    ipcMain.handle("dami:hide", () => {
+      win?.hide();
+      return true;
+    });
+    createWindow();
+    await createTray();
+    startDesktopWatcher();
+    startWakeListener();
   });
-  ipcMain.handle("dami:set-launch-at-startup", (_e, v) => {
-    const s = { ...readSettings(), launchAtStartup: Boolean(v) };
-    writeSettings(s);
-    syncLoginItem(s);
-    return s.launchAtStartup;
-  });
-  ipcMain.handle("dami:set-wake-word-enabled", (_e, v) => {
-    const s = { ...readSettings(), wakeWordEnabled: Boolean(v) };
-    writeSettings(s);
-    if (s.wakeWordEnabled) startWakeListener();
-    else {
-      stopWakeListener();
-      setWakeStatus("disabled");
-    }
-    return s.wakeWordEnabled;
-  });
-  ipcMain.handle("dami:set-floating-avatar-enabled", (_e, v) => {
-    const s = { ...readSettings(), floatingAvatarEnabled: Boolean(v) };
-    writeSettings(s);
-    if (s.floatingAvatarEnabled && isDesktopForeground) win?.showInactive();
-    else win?.hide();
-    return s.floatingAvatarEnabled;
-  });
-  ipcMain.handle("dami:get-desktop-settings", () => {
-    const s = readSettings();
-    return {
-      desktopDock: s.dock,
-      wakeWordEnabled: s.wakeWordEnabled !== false,
-      floatingAvatarEnabled: s.floatingAvatarEnabled !== false,
-      launchAtStartup: s.launchAtStartup !== false,
-    };
-  });
-  ipcMain.handle("dami:get-wake-status", () => wakeStatus);
-  ipcMain.handle("dami:begin-voice-turn", () => {
-    beginVoiceTurn();
-    return true;
-  });
-  ipcMain.handle("dami:voice-stage", (_event, stage, error) => {
-    logDesktop("renderer-stage", { stage: String(stage || ""), error: String(error || "") });
-    return true;
-  });
-  ipcMain.handle("dami:end-voice-turn", () => {
-    endVoiceTurn();
-    return true;
-  });
-  ipcMain.handle("dami:local-transcribe", () => localTranscribe());
-  ipcMain.handle("dami:local-speak", (_e, text) => localSpeak(text));
-  ipcMain.handle("dami:stop-local-speech", () => {
-    stopLocalSpeech();
-    return true;
-  });
-  ipcMain.handle("dami:show", () => {
-    if (isDesktopForeground && readSettings().floatingAvatarEnabled !== false) win?.showInactive();
-    return isDesktopForeground && readSettings().floatingAvatarEnabled !== false;
-  });
-  ipcMain.handle("dami:hide", () => {
-    win?.hide();
-    return true;
-  });
-  createWindow();
-  await createTray();
-  startDesktopWatcher();
-  startWakeListener();
-});
 app.on("before-quit", () => {
   isQuitting = true;
   stopWakeListener();
