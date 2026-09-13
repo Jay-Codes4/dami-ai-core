@@ -31,6 +31,7 @@ type DesktopBridge = {
   stopLocalSpeech?: () => Promise<boolean>;
   beginVoiceTurn?: () => Promise<boolean>;
   endVoiceTurn?: () => Promise<boolean>;
+  reportVoiceStage?: (stage: string, error?: string) => Promise<boolean>;
 };
 function Companion() {
   const { startListening, stopSpeaking, robotState, level, stage, statusText } = useVoiceSession();
@@ -43,7 +44,9 @@ function Companion() {
     [nativeWakeStatus, setNativeWakeStatus] = useState<WakeStatus>("starting");
   useEffect(() => {
     stageRef.current = stage;
-  }, [stage]);
+    const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
+    void bridge?.reportVoiceStage?.(stage, statusText);
+  }, [stage, statusText]);
   useEffect(() => {
     const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
     if (!bridge?.isDesktop) return;
@@ -219,8 +222,7 @@ function Companion() {
       <main className="flex h-screen w-screen select-none items-center justify-center overflow-hidden bg-transparent p-0">
         <button
           type="button"
-          onClick={() => void activate()}
-          onDoubleClick={() => void activate()}
+          onPointerDown={() => void activate()}
           className="grid h-[180px] w-[180px] place-items-center overflow-hidden rounded-full bg-transparent p-0 outline-none transition-transform hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Talk with Dami"
         >
@@ -237,8 +239,7 @@ function Companion() {
     <main className="flex min-h-screen select-none flex-col items-center justify-end bg-transparent p-2 text-center">
       <button
         type="button"
-        onDoubleClick={() => void activate()}
-        onClick={() => void activate()}
+        onPointerDown={() => void activate()}
         className="rounded-full bg-transparent p-0 outline-none transition-transform hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-primary"
         aria-label="Talk with Dami"
       >
