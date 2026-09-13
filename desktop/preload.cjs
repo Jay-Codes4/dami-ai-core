@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld("damiDesktop", {
   localSpeak: (text) => ipcRenderer.invoke("dami:local-speak", text),
   stopLocalSpeech: () => ipcRenderer.invoke("dami:stop-local-speech"),
   onWakeWord: (callback) => {
-    const listener = () => callback();
+    const listener = (_event, payload) => callback(payload || {});
     ipcRenderer.on("dami:wake-word", listener);
     return () => ipcRenderer.removeListener("dami:wake-word", listener);
   },

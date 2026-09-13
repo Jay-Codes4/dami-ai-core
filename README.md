@@ -26,6 +26,8 @@ Dami also ships as a Windows Electron companion. Installed Dami floats on the de
 
 Desktop voice turns support click-to-interrupt follow-ups, automatic recovery from temporary Sahara session allocation failures, and tray controls for talking or pausing the wake listener.
 
+Wake interaction supports both a two-step prompt (`Hey Dami` → acknowledgement and greeting → question) and a single utterance (`Hey Dami, <question>`). Distinct start and end cues make the active recording boundary unambiguous.
+
 Windows installation, browser-download warnings, SmartScreen steps, microphone permissions, and the judge test flow are documented in [`INSTALL_WINDOWS.md`](INSTALL_WINDOWS.md).
 
 Current launch language set: English, Akan↔English, Yoruba↔English, Swahili↔English, and Nigerian Pidgin↔English.
