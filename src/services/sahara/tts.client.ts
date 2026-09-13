@@ -133,7 +133,7 @@ async function requestSahara(text: string, o: VoiceOptions) {
   const controller = new AbortController(),
     // A cold Sahara worker can take a few seconds. The former 1.8s cutoff
     // caused healthy female voice requests to fall back to a local system voice.
-    timer = setTimeout(() => controller.abort(), 14000);
+    timer = setTimeout(() => controller.abort(), 7000);
   try {
     const response = await fetch("/api/sahara-tts", {
       method: "POST",
@@ -153,7 +153,7 @@ async function requestSahara(text: string, o: VoiceOptions) {
 async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle | null> {
   const clean = cleanSpeechText(text);
   if (!clean) return null;
-  const first = (clean.match(/^.{1,180}?(?:[.!?](?:\s|$)|$)/)?.[0] || clean.slice(0, 180)).trim(),
+  const first = (clean.match(/^.{1,120}?(?:[.!?](?:\s|$)|$)/)?.[0] || clean.slice(0, 120)).trim(),
     rest = clean.slice(first.length).trim();
   const firstBlob = await requestSahara(first, o);
   if (!firstBlob) return null;
