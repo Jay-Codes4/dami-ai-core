@@ -11,7 +11,8 @@ contextBridge.exposeInMainWorld("damiDesktop", {
   show: () => ipcRenderer.invoke("dami:show"),
   hide: () => ipcRenderer.invoke("dami:hide"),
   getWakeStatus: () => ipcRenderer.invoke("dami:get-wake-status"),
-  beginVoiceTurn: () => ipcRenderer.invoke("dami:begin-voice-turn"),
+  rendererReady: () => ipcRenderer.invoke("dami:renderer-ready"),
+  beginVoiceTurn: (activationId) => ipcRenderer.invoke("dami:begin-voice-turn", activationId),
   endVoiceTurn: () => ipcRenderer.invoke("dami:end-voice-turn"),
   reportVoiceStage: (stage, error) => ipcRenderer.invoke("dami:voice-stage", stage, error),
   localTranscribe: () => ipcRenderer.invoke("dami:local-transcribe"),
@@ -23,7 +24,7 @@ contextBridge.exposeInMainWorld("damiDesktop", {
     return () => ipcRenderer.removeListener("dami:wake-word", listener);
   },
   onTalkRequest: (callback) => {
-    const listener = () => callback();
+    const listener = (_event, payload) => callback(payload || {});
     ipcRenderer.on("dami:talk-request", listener);
     return () => ipcRenderer.removeListener("dami:talk-request", listener);
   },

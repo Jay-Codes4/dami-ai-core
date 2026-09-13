@@ -55,7 +55,7 @@ function DesktopPage() {
             {
               icon: MonitorUp,
               title: "Floating Dami",
-              body: "Keep the avatar available above your desktop and click it whenever you want help.",
+              body: "Follow the live status below the avatar. Click or double-click Dami whenever you want help.",
             },
             {
               icon: Mic2,
@@ -102,7 +102,7 @@ function DesktopPage() {
               ],
               [
                 "4. Start talking",
-                "Wait for the floating avatar, then say Hey Dami. You can also single-click or double-click Dami and speak immediately after the listening cue.",
+                "Wait for “Click me · or say Hey Dami”. Say Hey Dami, or single-click/double-click the avatar, then speak after the rising listening cue.",
               ],
             ].map(([title, body]) => (
               <li

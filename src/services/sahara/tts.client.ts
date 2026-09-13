@@ -48,12 +48,20 @@ function browserSpeech(text: string, o: VoiceOptions): SpeechHandle {
   u.rate = 1.08;
   u.pitch = 1.02;
   const voices = window.speechSynthesis.getVoices(),
+    knownFemale =
+      /female|woman|aria|jenny|zira|hazel|susan|samantha|victoria|karen|moira|tessa|veena|fiona|serena|catherine|linda|ayanda/i,
+    knownMale =
+      /\b(?:male|david|mark|guy|george|james|daniel|alex|fred|aaron|arthur|andrew|ryan|christopher|eric|roger|stefan)\b/i,
     preferred =
       voices.find(
+        (v) => knownFemale.test(v.name) && /en|nigeria|yoruba|africa/i.test(`${v.name} ${v.lang}`),
+      ) ??
+      voices.find(
         (v) =>
-          /female|woman|aria|jenny|zira/i.test(v.name) &&
-          /en|nigeria|yoruba|africa/i.test(`${v.name} ${v.lang}`),
-      ) ?? voices.find((v) => !/male/i.test(v.name) && v.lang.toLowerCase().startsWith("en"));
+          knownFemale.test(v.name) &&
+          !knownMale.test(v.name) &&
+          v.lang.toLowerCase().startsWith("en"),
+      );
   if (preferred) u.voice = preferred;
   let settled = false,
     paused = false,
@@ -135,7 +143,7 @@ function nativeDesktopSpeech(text: string): SpeechHandle | null {
   };
 }
 function splitForSahara(text: string) {
-  const words = text.slice(0, 2400).trim().split(/\s+/).filter(Boolean),
+  const words = text.trim().split(/\s+/).filter(Boolean),
     chunks: string[] = [];
   let current = "";
   for (const sourceWord of words) {

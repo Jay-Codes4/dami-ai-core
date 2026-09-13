@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "desktop:dev": "electron desktop/main.cjs",
     "desktop:build:win": "electron-builder --win nsis --x64 --publish never",
+    "test": "node --test desktop/*.test.cjs voice-gateway/*.test.cjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -21,10 +22,29 @@
     "appId": "ai.dami.desktop",
     "productName": "Dami",
     "asar": true,
-    "directories": { "output": "release" },
-    "files": ["desktop/**/*", "package.json"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop/voice",
+        "to": "voice"
+      }
+    ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "Dami-Setup.exe"
     },
     "nsis": {
@@ -37,13 +57,17 @@
       "shortcutName": "Dami",
       "runAfterFinish": true,
       "language": "1033",
-      "installerLanguages": ["en_US"],
+      "installerLanguages": [
+        "en_US"
+      ],
       "displayLanguageSelector": false,
       "deleteAppDataOnUninstall": false,
       "include": "build/installer.nsh"
     }
   },
-  "overrides": { "rolldown": "1.2.1" },
+  "overrides": {
+    "rolldown": "1.2.1"
+  },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",

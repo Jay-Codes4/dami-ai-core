@@ -14,7 +14,15 @@ Dami combines Sahara speech recognition with a source-grounded legal research ag
 
 ## Working Prototype
 
-Web application: `https://dami-ai-core.vercel.app`
+Web application: [Open Dami AI](https://dami-ai-core.vercel.app)
+
+Windows companion: [Download the newest Dami installer](https://github.com/Jay-Codes4/dami-ai-core/releases/latest/download/Dami-Setup.exe)
+
+### Fast judge path
+
+**On the web:** open **Ask Dami**, then single-click or double-click Dami's avatar (or select **Talk with Dami**). Begin speaking after the rising cue. The on-screen label changes through **Dami is listening → transcribing → researching → speaking**, and the complete answer remains visible with its sources.
+
+**On Windows:** install the latest release, wait for the floating avatar to say **Click me · or say “Hey Dami”**, then either say **“Hey Dami”** or single-click/double-click the avatar. The rising cue means the microphone is listening; the descending cue means recording ended. The status pill always shows what Dami is doing.
 
 Core flow:
 
@@ -22,11 +30,11 @@ Core flow:
 Voice → Sahara STT → legal research/search → legal reasoning → cited answer → Sahara TTS
 ```
 
-Dami also ships as a Windows Electron companion. Installed Dami floats on the desktop and supports hands-free **“Hey Dami”** activation. The Windows build uses a narrow OS speech grammar for the wake phrase and then starts Dami's normal voice workflow; clicking the avatar remains a fallback, not a requirement.
+Dami also ships as a Windows Electron companion. Installed Dami floats on the desktop and supports hands-free **“Hey Dami”** activation. The Windows build uses continuous native Windows speech recognition with an accent-tolerant wake grammar and dictation fallback, then starts Dami's normal voice workflow. Single-clicking or double-clicking the avatar is an equally supported activation method.
 
 Desktop voice turns support click-to-interrupt follow-ups, automatic recovery from temporary Sahara session allocation failures, and tray controls for talking or pausing the wake listener.
 
-Wake interaction supports both a two-step prompt (`Hey Dami` → acknowledgement and greeting → question) and a single utterance (`Hey Dami, <question>`). Distinct start and end cues make the active recording boundary unambiguous.
+Wake interaction supports both a two-step prompt (`Hey Dami` → listening cue → question) and a single utterance (`Hey Dami, <question>`). Distinct start and end cues make the active recording boundary unambiguous, while animated labels make listening, transcription, research, and speech visible.
 
 Windows installation, browser-download warnings, SmartScreen steps, microphone permissions, and the judge test flow are documented in [`INSTALL_WINDOWS.md`](INSTALL_WINDOWS.md).
 
