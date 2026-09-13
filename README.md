@@ -24,6 +24,8 @@ Voice → Sahara STT → legal research/search → legal reasoning → cited ans
 
 Dami also ships as a Windows Electron companion. Installed Dami floats on the desktop and supports hands-free **“Hey Dami”** activation. The Windows build uses a narrow OS speech grammar for the wake phrase and then starts Dami's normal voice workflow; clicking the avatar remains a fallback, not a requirement.
 
+Windows installation, browser-download warnings, SmartScreen steps, microphone permissions, and the judge test flow are documented in [`INSTALL_WINDOWS.md`](INSTALL_WINDOWS.md).
+
 Current launch language set: English, Akan↔English, Yoruba↔English, Swahili↔English, and Nigerian Pidgin↔English.
 
 ## Code & Technical Notes
