@@ -23,6 +23,7 @@ type WakeStatus =
 type DesktopBridge = {
   isDesktop?: boolean;
   onWakeWord?: (cb: () => void) => void | (() => void);
+  onTalkRequest?: (cb: () => void) => void | (() => void);
   getWakeStatus?: () => Promise<WakeStatus>;
   onWakeStatus?: (cb: (s: WakeStatus) => void) => void | (() => void);
   localTranscribe?: () => Promise<string>;
@@ -32,7 +33,7 @@ type DesktopBridge = {
   endVoiceTurn?: () => Promise<boolean>;
 };
 function Companion() {
-  const { startListening, robotState, level, stage, statusText } = useVoiceSession();
+  const { startListening, stopSpeaking, robotState, level, stage, statusText } = useVoiceSession();
   const recognitionRef = useRef<Recognition | null>(null),
     stageRef = useRef(stage),
     activatingRef = useRef(false),
@@ -69,7 +70,9 @@ function Companion() {
     };
   }, []);
   const activate = useCallback(async () => {
-    if (activatingRef.current || !["idle", "answered", "error"].includes(stageRef.current)) return;
+    if (activatingRef.current) return;
+    if (stageRef.current === "speaking") stopSpeaking();
+    else if (!["idle", "answered", "error"].includes(stageRef.current)) return;
     activatingRef.current = true;
     recognitionRef.current?.stop();
     const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
@@ -84,7 +87,7 @@ function Companion() {
     } finally {
       activatingRef.current = false;
     }
-  }, [startListening]);
+  }, [startListening, stopSpeaking]);
   useEffect(() => {
     if (!desktopTurnRef.current || !["answered", "error"].includes(stage)) return;
     desktopTurnRef.current = false;
@@ -101,10 +104,12 @@ function Companion() {
       return;
     }
     let wc: void | (() => void),
+      tc: void | (() => void),
       sc: void | (() => void),
       cancelled = false;
     setWakeAvailable(true);
     if (bridge.onWakeWord) wc = bridge.onWakeWord(() => void activate());
+    if (bridge.onTalkRequest) tc = bridge.onTalkRequest(() => void activate());
     if (bridge.onWakeStatus)
       sc = bridge.onWakeStatus((s) => {
         setNativeWakeStatus(s);
@@ -130,6 +135,7 @@ function Companion() {
     return () => {
       cancelled = true;
       if (typeof wc === "function") wc();
+      if (typeof tc === "function") tc();
       if (typeof sc === "function") sc();
     };
   }, [activate]);
