@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("damiDesktop", {
     ipcRenderer.on("dami:wake-word", listener);
     return () => ipcRenderer.removeListener("dami:wake-word", listener);
   },
+  onTalkRequest: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("dami:talk-request", listener);
+    return () => ipcRenderer.removeListener("dami:talk-request", listener);
+  },
   onWakeStatus: (callback) => {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on("dami:wake-status", listener);
