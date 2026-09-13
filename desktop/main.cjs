@@ -12,9 +12,11 @@ let win = null,
   wakeProcess = null,
   localSpeechProcess = null,
   desktopWatchProcess = null,
+  wakeResumeTimer = null,
   wakeStatus = "starting",
   isQuitting = false,
-  isDesktopForeground = true;
+  isDesktopForeground = true,
+  isVoiceTurnActive = false;
 function settingsPath() {
   return path.join(app.getPath("userData"), "desktop-settings.json");
 }
@@ -86,6 +88,21 @@ function stopWakeListener() {
   } catch {}
   wakeProcess = null;
 }
+function beginVoiceTurn() {
+  isVoiceTurnActive = true;
+  if (wakeResumeTimer) clearTimeout(wakeResumeTimer);
+  stopWakeListener();
+  setWakeStatus("listening-local");
+  if (win && !win.isDestroyed()) win.showInactive();
+  // Safety recovery if the renderer closes or a provider request stalls.
+  wakeResumeTimer = setTimeout(() => endVoiceTurn(), 45000);
+}
+function endVoiceTurn() {
+  isVoiceTurnActive = false;
+  if (wakeResumeTimer) clearTimeout(wakeResumeTimer);
+  wakeResumeTimer = null;
+  if (!isQuitting && readSettings().wakeWordEnabled !== false) startWakeListener();
+}
 function stopLocalSpeech() {
   if (!localSpeechProcess) return;
   try {
@@ -104,7 +121,7 @@ function setDesktopForeground(value) {
   isDesktopForeground = Boolean(value);
   if (!win || win.isDestroyed()) return;
   const enabled = readSettings().floatingAvatarEnabled !== false;
-  if (isDesktopForeground && enabled) {
+  if ((isDesktopForeground || isVoiceTurnActive) && enabled) {
     win.setAlwaysOnTop(true, "floating");
     if (!win.isVisible()) win.showInactive();
   } else if (win.isVisible()) win.hide();
@@ -362,13 +379,13 @@ function startWakeListener() {
     "if(-not $info){$info=$installed | Select-Object -First 1}",
     "$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine($info.Id)",
     "$choices=New-Object System.Speech.Recognition.Choices",
-    "$choices.Add('hey dami');$choices.Add('hey dummy');$choices.Add('hey demi')",
+    "$choices.Add('hey dami');$choices.Add('hey dummy');$choices.Add('hey demi');$choices.Add('hey dammy');$choices.Add('hey darmi');$choices.Add('okay dami');$choices.Add('hi dami');$choices.Add('dami')",
     "$gb=New-Object System.Speech.Recognition.GrammarBuilder($choices)",
     "$gb.Culture=$info.Culture",
     "$g=New-Object System.Speech.Recognition.Grammar($gb)",
     "$r.LoadGrammar($g)",
     "$r.SetInputToDefaultAudioDevice()",
-    "Register-ObjectEvent $r SpeechRecognized -Action {if($Event.SourceEventArgs.Result.Confidence -ge .38){[Console]::Out.WriteLine('DAMI_WAKE');[Console]::Out.Flush()}}|Out-Null",
+    "Register-ObjectEvent $r SpeechRecognized -Action {if($Event.SourceEventArgs.Result.Confidence -ge .25){[Console]::Out.WriteLine('DAMI_WAKE');[Console]::Out.Flush()}}|Out-Null",
     "$r.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)",
     "[Console]::Out.WriteLine('DAMI_READY');[Console]::Out.Flush()",
     "while($true){Start-Sleep -Milliseconds 500}",
@@ -388,7 +405,8 @@ function startWakeListener() {
       const line = raw.trim();
       if (line === "DAMI_READY") setWakeStatus("ready");
       else if (line === "DAMI_WAKE") {
-        if (isDesktopForeground) win?.showInactive();
+        beginVoiceTurn();
+        win?.showInactive();
         win?.webContents.send("dami:wake-word");
       } else if (line.startsWith("DAMI_ERROR:")) {
         console.error(line);
@@ -419,6 +437,31 @@ async function createTray() {
     tray.setToolTip("Dami");
     tray.setContextMenu(
       Menu.buildFromTemplate([
+        {
+          label: "Talk with Dami",
+          click: () => {
+            beginVoiceTurn();
+            win?.showInactive();
+            win?.webContents.send("dami:talk-request");
+          },
+        },
+        {
+          label: readSettings().wakeWordEnabled === false ? 'Enable "Hey Dami"' : 'Pause "Hey Dami"',
+          click: () => {
+            const current = readSettings();
+            const enabled = current.wakeWordEnabled === false;
+            writeSettings({ ...current, wakeWordEnabled: enabled });
+            if (enabled) startWakeListener();
+            else {
+              stopWakeListener();
+              setWakeStatus("disabled");
+            }
+            tray?.destroy();
+            tray = null;
+            void createTray();
+          },
+        },
+        { type: "separator" },
         {
           label: "Show Dami on desktop",
           click: () => {
@@ -538,6 +581,14 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.handle("dami:get-wake-status", () => wakeStatus);
+  ipcMain.handle("dami:begin-voice-turn", () => {
+    beginVoiceTurn();
+    return true;
+  });
+  ipcMain.handle("dami:end-voice-turn", () => {
+    endVoiceTurn();
+    return true;
+  });
   ipcMain.handle("dami:local-transcribe", () => localTranscribe());
   ipcMain.handle("dami:local-speak", (_e, text) => localSpeak(text));
   ipcMain.handle("dami:stop-local-speech", () => {

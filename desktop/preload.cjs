@@ -6,10 +6,13 @@ contextBridge.exposeInMainWorld("damiDesktop", {
   setDock: (dock) => ipcRenderer.invoke("dami:set-dock", dock),
   setLaunchAtStartup: (enabled) => ipcRenderer.invoke("dami:set-launch-at-startup", enabled),
   setWakeWordEnabled: (enabled) => ipcRenderer.invoke("dami:set-wake-word-enabled", enabled),
-  setFloatingAvatarEnabled: (enabled) => ipcRenderer.invoke("dami:set-floating-avatar-enabled", enabled),
+  setFloatingAvatarEnabled: (enabled) =>
+    ipcRenderer.invoke("dami:set-floating-avatar-enabled", enabled),
   show: () => ipcRenderer.invoke("dami:show"),
   hide: () => ipcRenderer.invoke("dami:hide"),
   getWakeStatus: () => ipcRenderer.invoke("dami:get-wake-status"),
+  beginVoiceTurn: () => ipcRenderer.invoke("dami:begin-voice-turn"),
+  endVoiceTurn: () => ipcRenderer.invoke("dami:end-voice-turn"),
   localTranscribe: () => ipcRenderer.invoke("dami:local-transcribe"),
   localSpeak: (text) => ipcRenderer.invoke("dami:local-speak", text),
   stopLocalSpeech: () => ipcRenderer.invoke("dami:stop-local-speech"),
@@ -17,6 +20,11 @@ contextBridge.exposeInMainWorld("damiDesktop", {
     const listener = () => callback();
     ipcRenderer.on("dami:wake-word", listener);
     return () => ipcRenderer.removeListener("dami:wake-word", listener);
+  },
+  onTalkRequest: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("dami:talk-request", listener);
+    return () => ipcRenderer.removeListener("dami:talk-request", listener);
   },
   onWakeStatus: (callback) => {
     const listener = (_event, status) => callback(status);

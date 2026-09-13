@@ -20,10 +20,15 @@ function DesktopPage() {
       <div className="mx-auto max-w-4xl space-y-10">
         <section className="grid items-center gap-8 rounded-3xl border border-border/60 bg-card p-6 shadow-[var(--shadow-soft)] md:grid-cols-[1fr_260px] md:p-10">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">Dami Desktop</p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Keep Dami within reach on your PC</h1>
+            <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">
+              Dami Desktop
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Keep Dami within reach on your PC
+            </h1>
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
-              Dami floats on your desktop, wakes when you say “Hey Dami”, listens to your question and brings the legal research back without making you open the browser first.
+              Dami floats on your desktop, wakes when you say “Hey Dami”, listens to your question
+              and brings the legal research back without making you open the browser first.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button asChild size="lg">
@@ -31,26 +36,96 @@ function DesktopPage() {
                   <Download className="mr-2 h-5 w-5" /> Install Dami for Windows
                 </a>
               </Button>
-              <Button asChild variant="outline" size="lg"><Link to="/ask">Use Dami on the web</Link></Button>
+              <Button asChild variant="outline" size="lg">
+                <Link to="/ask">Use Dami on the web</Link>
+              </Button>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Windows 10/11 · 64-bit. Dami can launch with your PC and stay available as a small floating assistant.
+              Windows 10/11 · 64-bit. Dami can launch with your PC and stay available as a small
+              floating assistant.
             </p>
           </div>
-          <div className="flex justify-center"><DamiAvatar state="welcome" size={220} /></div>
+          <div className="flex justify-center">
+            <DamiAvatar state="welcome" size={220} />
+          </div>
         </section>
 
         <section className="grid gap-4 md:grid-cols-3">
           {[
-            { icon: MonitorUp, title: "Floating Dami", body: "Keep the avatar available above your desktop and click it whenever you want help." },
-            { icon: Mic2, title: 'Say “Hey Dami”', body: "Wake Dami by voice, then ask your question naturally instead of opening a new window first." },
-            { icon: Sparkles, title: "Same legal brain", body: "Desktop Dami uses the same Sahara voice pipeline, legal research and source-grounded answers as the web app." },
+            {
+              icon: MonitorUp,
+              title: "Floating Dami",
+              body: "Keep the avatar available above your desktop and click it whenever you want help.",
+            },
+            {
+              icon: Mic2,
+              title: "Say “Hey Dami”",
+              body: "Wake Dami by voice, then ask your question naturally instead of opening a new window first.",
+            },
+            {
+              icon: Sparkles,
+              title: "Same legal brain",
+              body: "Desktop Dami uses the same Sahara voice pipeline, legal research and source-grounded answers as the web app.",
+            },
           ].map(({ icon: Icon, title, body }) => (
             <Card key={title}>
-              <CardHeader><Icon className="h-5 w-5 text-primary" /><CardTitle className="text-base">{title}</CardTitle></CardHeader>
-              <CardContent className="text-sm leading-relaxed text-muted-foreground">{body}</CardContent>
+              <CardHeader>
+                <Icon className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">{title}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm leading-relaxed text-muted-foreground">
+                {body}
+              </CardContent>
             </Card>
           ))}
+        </section>
+
+        <section className="rounded-3xl border border-border/60 bg-card p-6 shadow-[var(--shadow-soft)] md:p-8">
+          <h2 className="text-2xl font-semibold tracking-tight">How to install Dami safely</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Windows or your browser may warn about Dami because this open-source installer is not
+            yet code-signed. Only download it from Dami’s official GitHub repository.
+          </p>
+          <ol className="mt-6 grid gap-4 text-sm leading-relaxed md:grid-cols-2">
+            {[
+              [
+                "1. Download",
+                "Select Install Dami for Windows. If Chrome or Edge warns that the file is uncommon, open the download menu and choose Keep or Keep anyway.",
+              ],
+              [
+                "2. Run the installer",
+                "Open Dami-Setup.exe. If SmartScreen says Windows protected your PC, choose More info, confirm the app is Dami, then choose Run anyway.",
+              ],
+              [
+                "3. Allow the microphone",
+                "Finish setup and allow microphone access. Windows must also have Let desktop apps access your microphone enabled.",
+              ],
+              [
+                "4. Start talking",
+                "Wait for the floating avatar, then say Hey Dami. You can also single-click or double-click Dami and speak immediately after the listening cue.",
+              ],
+            ].map(([title, body]) => (
+              <li
+                key={title}
+                className="list-none rounded-2xl border border-border/60 bg-background/60 p-4"
+              >
+                <p className="font-semibold text-foreground">{title}</p>
+                <p className="mt-1 text-muted-foreground">{body}</p>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-5 text-sm text-muted-foreground">
+            Need troubleshooting or the judge verification checklist?{" "}
+            <a
+              className="font-medium text-primary underline-offset-4 hover:underline"
+              href="https://github.com/Jay-Codes4/dami-ai-core/blob/main/INSTALL_WINDOWS.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Read the complete Windows installation guide
+            </a>
+            .
+          </p>
         </section>
       </div>
     </AppShell>

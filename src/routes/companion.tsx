@@ -23,18 +23,21 @@ type WakeStatus =
 type DesktopBridge = {
   isDesktop?: boolean;
   onWakeWord?: (cb: () => void) => void | (() => void);
+  onTalkRequest?: (cb: () => void) => void | (() => void);
   getWakeStatus?: () => Promise<WakeStatus>;
   onWakeStatus?: (cb: (s: WakeStatus) => void) => void | (() => void);
   localTranscribe?: () => Promise<string>;
   localSpeak?: (text: string) => Promise<boolean>;
   stopLocalSpeech?: () => Promise<boolean>;
+  beginVoiceTurn?: () => Promise<boolean>;
+  endVoiceTurn?: () => Promise<boolean>;
 };
 function Companion() {
-  const { readAloud, startListening, ask, robotState, level, stage, statusText } =
-    useVoiceSession();
+  const { startListening, stopSpeaking, robotState, level, stage, statusText } = useVoiceSession();
   const recognitionRef = useRef<Recognition | null>(null),
     stageRef = useRef(stage),
-    activatingRef = useRef(false);
+    activatingRef = useRef(false),
+    desktopTurnRef = useRef(false);
   const [wakeAvailable, setWakeAvailable] = useState(true),
     [wakeActive, setWakeActive] = useState(false),
     [nativeWakeStatus, setNativeWakeStatus] = useState<WakeStatus>("starting");
@@ -67,29 +70,30 @@ function Companion() {
     };
   }, []);
   const activate = useCallback(async () => {
-    if (activatingRef.current || !["idle", "answered", "error"].includes(stageRef.current)) return;
+    if (activatingRef.current) return;
+    if (stageRef.current === "speaking") stopSpeaking();
+    else if (!["idle", "answered", "error"].includes(stageRef.current)) return;
     activatingRef.current = true;
     recognitionRef.current?.stop();
     const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
     try {
-      if (bridge?.isDesktop && bridge.localTranscribe) {
-        await readAloud("How can I help you today?");
-        try {
-          const text = await bridge.localTranscribe();
-          if (text?.trim()) await ask(text.trim());
-          else throw new Error("I didn't hear a clear question.");
-        } catch (err) {
-          console.warn("Local desktop speech fallback unavailable", err);
-          await startListening();
-        }
-      } else {
-        void readAloud("How can I help you today?");
-        await startListening();
+      if (bridge?.isDesktop) {
+        desktopTurnRef.current = true;
+        await bridge.beginVoiceTurn?.();
       }
+      // Open the microphone immediately. A spoken greeting delayed capture and
+      // could be transcribed as the user's question on slower machines.
+      await startListening();
     } finally {
       activatingRef.current = false;
     }
-  }, [ask, readAloud, startListening]);
+  }, [startListening, stopSpeaking]);
+  useEffect(() => {
+    if (!desktopTurnRef.current || !["answered", "error"].includes(stage)) return;
+    desktopTurnRef.current = false;
+    const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
+    void bridge?.endVoiceTurn?.();
+  }, [stage]);
   useEffect(() => {
     const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
     if (!bridge?.isDesktop) return;
@@ -100,10 +104,12 @@ function Companion() {
       return;
     }
     let wc: void | (() => void),
+      tc: void | (() => void),
       sc: void | (() => void),
       cancelled = false;
     setWakeAvailable(true);
     if (bridge.onWakeWord) wc = bridge.onWakeWord(() => void activate());
+    if (bridge.onTalkRequest) tc = bridge.onTalkRequest(() => void activate());
     if (bridge.onWakeStatus)
       sc = bridge.onWakeStatus((s) => {
         setNativeWakeStatus(s);
@@ -129,6 +135,7 @@ function Companion() {
     return () => {
       cancelled = true;
       if (typeof wc === "function") wc();
+      if (typeof tc === "function") tc();
       if (typeof sc === "function") sc();
     };
   }, [activate]);
@@ -213,6 +220,7 @@ function Companion() {
         <button
           type="button"
           onClick={() => void activate()}
+          onDoubleClick={() => void activate()}
           className="grid h-[180px] w-[180px] place-items-center overflow-hidden rounded-full bg-transparent p-0 outline-none transition-transform hover:scale-[1.02] focus-visible:ring-2 focus-visible:ring-primary"
           aria-label="Talk with Dami"
         >
