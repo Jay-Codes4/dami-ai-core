@@ -154,6 +154,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
   const meter = new Float32Array(analyser.fftSize),
     startedAt = Date.now();
   let transcript = "",
+    committedTranscript = "",
     stopped = false,
     cancelled = false,
     ack = 0,
@@ -214,7 +215,10 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
 
       if ((type === "PARTIAL_TRANSCRIPT" || type === "COMMITTED_TRANSCRIPT") && text)
         transcript = text;
-      if (type === "COMMITTED_TRANSCRIPT") finalResolve?.(transcript);
+      if (type === "COMMITTED_TRANSCRIPT") {
+        committedTranscript = transcript;
+        finalResolve?.(committedTranscript);
+      }
 
       if (
         [
@@ -243,7 +247,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     finalResolve?.("");
   };
   ws.onclose = () => {
-    if (!stopped && !cancelled) finalResolve?.(transcript);
+    if (!stopped && !cancelled) finalResolve?.(committedTranscript);
   };
 
   const teardown = () => {
@@ -306,7 +310,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     const final = socketReady
       ? await Promise.race([
           finalPromise,
-          new Promise<string>((resolve) => setTimeout(() => resolve(transcript), 1800)),
+          new Promise<string>((resolve) => setTimeout(() => resolve(committedTranscript), 1800)),
         ])
       : "";
     try {
@@ -314,7 +318,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     } catch {
       // The socket may already be closed after an upstream session failure.
     }
-    transcript = final.trim();
+    committedTranscript = final.trim();
     const blob = pcm16Wav(recordedChunks);
     if (blob.size < 844)
       throw new MicrophoneError(
@@ -328,8 +332,8 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
       mimeType: "audio/wav",
       extension: "wav",
       durationMs: Date.now() - startedAt,
-      transcript,
-      streamed: Boolean(transcript),
+      transcript: committedTranscript,
+      streamed: Boolean(committedTranscript),
     };
   };
 
