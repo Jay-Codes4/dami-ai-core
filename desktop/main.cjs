@@ -438,6 +438,31 @@ async function createTray() {
     tray.setContextMenu(
       Menu.buildFromTemplate([
         {
+          label: "Talk with Dami",
+          click: () => {
+            beginVoiceTurn();
+            win?.showInactive();
+            win?.webContents.send("dami:talk-request");
+          },
+        },
+        {
+          label: readSettings().wakeWordEnabled === false ? 'Enable "Hey Dami"' : 'Pause "Hey Dami"',
+          click: () => {
+            const current = readSettings();
+            const enabled = current.wakeWordEnabled === false;
+            writeSettings({ ...current, wakeWordEnabled: enabled });
+            if (enabled) startWakeListener();
+            else {
+              stopWakeListener();
+              setWakeStatus("disabled");
+            }
+            tray?.destroy();
+            tray = null;
+            void createTray();
+          },
+        },
+        { type: "separator" },
+        {
           label: "Show Dami on desktop",
           click: () => {
             if (isDesktopForeground) win?.showInactive();
