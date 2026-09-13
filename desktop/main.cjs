@@ -17,6 +17,21 @@ let win = null,
   isQuitting = false,
   isDesktopForeground = true,
   isVoiceTurnActive = false;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) app.quit();
+
+function diagnosticsPath() {
+  return path.join(app.getPath("userData"), "dami-desktop.log");
+}
+function logDesktop(event, details = {}) {
+  try {
+    fs.appendFileSync(
+      diagnosticsPath(),
+      `${JSON.stringify({ at: new Date().toISOString(), event, ...details })}\n`,
+      "utf8",
+    );
+  } catch {}
+}
 function settingsPath() {
   return path.join(app.getPath("userData"), "desktop-settings.json");
 }
@@ -89,6 +104,7 @@ function stopWakeListener() {
   wakeProcess = null;
 }
 function beginVoiceTurn() {
+  logDesktop("voice-turn-begin", { wakeStatus });
   isVoiceTurnActive = true;
   if (wakeResumeTimer) clearTimeout(wakeResumeTimer);
   stopWakeListener();
@@ -98,6 +114,7 @@ function beginVoiceTurn() {
   wakeResumeTimer = setTimeout(() => endVoiceTurn(), 45000);
 }
 function endVoiceTurn() {
+  logDesktop("voice-turn-end", { wakeStatus });
   isVoiceTurnActive = false;
   if (wakeResumeTimer) clearTimeout(wakeResumeTimer);
   wakeResumeTimer = null;
@@ -369,6 +386,7 @@ function startWakeListener() {
     return;
   }
   setWakeStatus("starting");
+  logDesktop("wake-starting");
   const script = [
     "$ErrorActionPreference='Stop'",
     "try {",
@@ -385,10 +403,8 @@ function startWakeListener() {
     "$g=New-Object System.Speech.Recognition.Grammar($gb)",
     "$r.LoadGrammar($g)",
     "$r.SetInputToDefaultAudioDevice()",
-    "Register-ObjectEvent $r SpeechRecognized -Action {if($Event.SourceEventArgs.Result.Confidence -ge .25){[Console]::Out.WriteLine('DAMI_WAKE');[Console]::Out.Flush()}}|Out-Null",
-    "$r.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)",
     "[Console]::Out.WriteLine('DAMI_READY');[Console]::Out.Flush()",
-    "while($true){Start-Sleep -Milliseconds 500}",
+    "while($true){$result=$r.Recognize([TimeSpan]::FromMilliseconds(900));if($null -ne $result -and $result.Confidence -ge .18){[Console]::Out.WriteLine('DAMI_WAKE');[Console]::Out.Flush()}}",
     "} catch {[Console]::Out.WriteLine('DAMI_ERROR:'+$_.Exception.Message);[Console]::Out.Flush();exit 1}",
   ].join("; ");
   wakeProcess = spawn(
@@ -403,13 +419,18 @@ function startWakeListener() {
     b = lines.pop() || "";
     for (const raw of lines) {
       const line = raw.trim();
-      if (line === "DAMI_READY") setWakeStatus("ready");
+      if (line === "DAMI_READY") {
+        setWakeStatus("ready");
+        logDesktop("wake-ready");
+      }
       else if (line === "DAMI_WAKE") {
+        logDesktop("wake-recognized");
         beginVoiceTurn();
         win?.showInactive();
         win?.webContents.send("dami:wake-word");
       } else if (line.startsWith("DAMI_ERROR:")) {
         console.error(line);
+        logDesktop("wake-error", { message: line.slice(11) });
         setWakeStatus("error");
       }
     }
@@ -417,6 +438,7 @@ function startWakeListener() {
   wakeProcess.stderr.on("data", (c) => console.error("Wake listener stderr", c.toString()));
   wakeProcess.on("error", (e) => {
     console.error(e);
+    logDesktop("wake-process-error", { message: e?.message || String(e) });
     setWakeStatus("error");
   });
   wakeProcess.on("exit", (code) => {
@@ -462,6 +484,14 @@ async function createTray() {
           },
         },
         { type: "separator" },
+        {
+          label: "Open Dami diagnostics",
+          click: () => {
+            const file = diagnosticsPath();
+            if (!fs.existsSync(file)) fs.writeFileSync(file, "", "utf8");
+            shell.showItemInFolder(file);
+          },
+        },
         {
           label: "Show Dami on desktop",
           click: () => {
@@ -519,6 +549,13 @@ function createWindow() {
     ? process.env.DAMI_DESKTOP_URL || s.webUrl || DEFAULT_WEB_URL
     : process.env.DAMI_DESKTOP_URL || "http://localhost:3000";
   void win.loadURL(`${base.replace(/\/$/, "")}/companion?desktop=1`);
+  win.webContents.on("did-finish-load", () => logDesktop("renderer-loaded", { url: win?.webContents.getURL() }));
+  win.webContents.on("did-fail-load", (_event, code, description, url) =>
+    logDesktop("renderer-load-failed", { code, description, url }),
+  );
+  win.webContents.on("render-process-gone", (_event, details) =>
+    logDesktop("renderer-process-gone", details),
+  );
   dockWindow(s.dock);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://")) void shell.openExternal(url);
@@ -539,7 +576,14 @@ function createWindow() {
   });
   win.on("closed", () => (win = null));
 }
-app.whenReady().then(async () => {
+if (hasSingleInstanceLock) app.on("second-instance", () => {
+  logDesktop("second-instance-blocked");
+  if (!win || win.isDestroyed()) return;
+  win.webContents.reloadIgnoringCache();
+  win.showInactive();
+});
+
+if (hasSingleInstanceLock) app.whenReady().then(async () => {
   configurePermissions();
   ipcMain.handle("dami:get-dock", () => readSettings().dock);
   ipcMain.handle("dami:set-dock", (_e, d) => {
@@ -583,6 +627,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("dami:get-wake-status", () => wakeStatus);
   ipcMain.handle("dami:begin-voice-turn", () => {
     beginVoiceTurn();
+    return true;
+  });
+  ipcMain.handle("dami:voice-stage", (_event, stage, error) => {
+    logDesktop("renderer-stage", { stage: String(stage || ""), error: String(error || "") });
     return true;
   });
   ipcMain.handle("dami:end-voice-turn", () => {
