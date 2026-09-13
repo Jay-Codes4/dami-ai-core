@@ -117,7 +117,7 @@ function Companion() {
     [ask, askWakeCapture, startListening, stopSpeaking],
   );
   useEffect(() => {
-    if (!desktopTurnRef.current || !["answered", "error"].includes(stage)) return;
+    if (!desktopTurnRef.current || !["idle", "answered", "error"].includes(stage)) return;
     desktopTurnRef.current = false;
     const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
     void bridge?.endVoiceTurn?.();
