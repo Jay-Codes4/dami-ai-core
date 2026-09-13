@@ -12,7 +12,7 @@ on:
       - "src/routes/companion.tsx"
       - "src/hooks/useVoiceSession.ts"
       - "src/services/voice/**"
-      - "src/services/sahara/tts.client.ts"
+      - "src/services/sahara/**"
       - "package.json"
       - ".github/workflows/desktop-windows.yml"
 
@@ -34,6 +34,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Build web app
+        run: npm run build
+
       - name: Build Dami installer
         run: npm run desktop:build:win
 
@@ -50,4 +53,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "desktop-v0.1.${{ github.run_number }}"
-          gh release create $tag release/Dami-Setup.exe --title "Dami Desktop $tag" --notes "Windows installer with Dami's latest wake phrase, listening cue, motion, voice, and installer experience." --latest
+          gh release create $tag release/Dami-Setup.exe --title "Dami Desktop $tag" --notes "Windows installer with Dami's latest wake phrase, listening cue, microphone fix, motion, voice, and installer experience." --latest
