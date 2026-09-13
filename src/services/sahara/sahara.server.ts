@@ -9,7 +9,9 @@ export const SAHARA_TTS_GENERATE_URL =
 
 export class SaharaNotConfiguredError extends Error {
   constructor() {
-    super("Sahara isn't connected yet. Add INTRON_API_KEY on the server to enable speech-to-text and text-to-speech.");
+    super(
+      "Sahara isn't connected yet. Add INTRON_API_KEY on the server to enable speech-to-text and text-to-speech.",
+    );
     this.name = "SaharaNotConfiguredError";
   }
 }
@@ -103,7 +105,11 @@ async function sendSttRequest(
 
   const raw = await response.text();
   let payload: SaharaSttPayload | null = null;
-  try { payload = raw ? (JSON.parse(raw) as SaharaSttPayload) : null; } catch { payload = null; }
+  try {
+    payload = raw ? (JSON.parse(raw) as SaharaSttPayload) : null;
+  } catch {
+    payload = null;
+  }
   return { response, payload, raw };
 }
 
@@ -112,19 +118,34 @@ export async function transcribe(request: SttRequest): Promise<SttResult> {
   const key = getSaharaKey();
   const pcm = decodeBase64(request.audioBase64);
   if (pcm.byteLength < 3200) {
-    throw new SaharaRequestError("Dami didn't receive enough audio to transcribe. Please speak for at least a moment and try again.");
+    throw new SaharaRequestError(
+      "Dami didn't receive enough audio to transcribe. Please speak for at least a moment and try again.",
+    );
   }
   const wav = pcm16ToWav(pcm, request.sampleRate);
 
   let attempt = await sendSttRequest(wav, request.language || "en", key);
-  if (!attempt.response.ok && request.language && request.language !== "en" && attempt.response.status === 400) {
+  if (
+    !attempt.response.ok &&
+    request.language &&
+    request.language !== "en" &&
+    attempt.response.status === 400
+  ) {
     attempt = await sendSttRequest(wav, "en", key);
   }
 
   if (!attempt.response.ok) {
-    const upstream = attempt.payload?.message ?? attempt.payload?.error ?? attempt.payload?.detail ?? attempt.raw.slice(0, 220);
-    console.error("Sahara STT upstream rejected recording", { status: attempt.response.status, upstream });
-    const message = upstream ||
+    const upstream =
+      attempt.payload?.message ??
+      attempt.payload?.error ??
+      attempt.payload?.detail ??
+      attempt.raw.slice(0, 220);
+    console.error("Sahara STT upstream rejected recording", {
+      status: attempt.response.status,
+      upstream,
+    });
+    const message =
+      upstream ||
       (attempt.response.status === 401 || attempt.response.status === 403
         ? "Sahara couldn't authenticate the speech request. Check the production INTRON_API_KEY."
         : attempt.response.status === 429
@@ -134,7 +155,11 @@ export async function transcribe(request: SttRequest): Promise<SttResult> {
   }
 
   const text = attempt.payload?.data?.audio_transcript ?? attempt.payload?.data?.transcript ?? "";
-  return { text: text.trim(), requestId: attempt.payload?.data?.file_id ?? null, durationMs: Date.now() - started };
+  return {
+    text: text.trim(),
+    requestId: attempt.payload?.data?.file_id ?? null,
+    durationMs: Date.now() - started,
+  };
 }
 
 export interface TtsRequest {
@@ -144,7 +169,18 @@ export interface TtsRequest {
   language: string;
 }
 
-export async function synthesize(request: TtsRequest): Promise<{ audio: Uint8Array; mime: string }> {
+type SaharaTtsPayload = {
+  data?: {
+    audio_path?: string;
+    processing_status?: string;
+  };
+  message?: string;
+  status?: string;
+};
+
+export async function synthesize(
+  request: TtsRequest,
+): Promise<{ audio: Uint8Array; mime: string }> {
   const key = getSaharaKey();
   const response = await fetch(SAHARA_TTS_GENERATE_URL, {
     method: "POST",
@@ -157,11 +193,42 @@ export async function synthesize(request: TtsRequest): Promise<{ audio: Uint8Arr
       output_audio_format: "wav",
     }),
   });
-  if (!response.ok) {
-    const detail = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new SaharaRequestError(detail?.message ?? "Sahara could not generate speech for that answer.");
+  const raw = await response.text();
+  let payload: SaharaTtsPayload | null = null;
+  try {
+    payload = raw ? (JSON.parse(raw) as SaharaTtsPayload) : null;
+  } catch {
+    payload = null;
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength === 0) throw new SaharaRequestError("Sahara returned no audio for this answer.");
-  return { audio: bytes, mime: response.headers.get("content-type") ?? "audio/wav" };
+  if (!response.ok) {
+    throw new SaharaRequestError(
+      payload?.message ?? "Sahara could not generate speech for that answer.",
+    );
+  }
+
+  // Sahara's synchronous Generate endpoint returns JSON containing the audio
+  // URL; the JSON response itself is not audio. Download it server-side so the
+  // API key and the upstream storage URL never become browser dependencies.
+  const audioPath = payload?.data?.audio_path;
+  if (!audioPath)
+    throw new SaharaRequestError(payload?.message ?? "Sahara returned no audio for this answer.");
+
+  let audioUrl: URL;
+  try {
+    audioUrl = new URL(audioPath);
+    if (audioUrl.protocol === "http:") audioUrl.protocol = "https:";
+    if (audioUrl.protocol !== "https:") throw new Error("Unsupported audio URL protocol");
+  } catch {
+    throw new SaharaRequestError("Sahara returned an invalid audio location.");
+  }
+
+  const audioResponse = await fetch(audioUrl, { redirect: "follow" });
+  if (!audioResponse.ok)
+    throw new SaharaRequestError(
+      `Sahara generated speech but its audio could not be downloaded (HTTP ${audioResponse.status}).`,
+    );
+  const bytes = new Uint8Array(await audioResponse.arrayBuffer());
+  if (bytes.byteLength === 0)
+    throw new SaharaRequestError("Sahara returned no audio for this answer.");
+  return { audio: bytes, mime: audioResponse.headers.get("content-type") ?? "audio/wav" };
 }
