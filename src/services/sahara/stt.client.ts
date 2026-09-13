@@ -380,11 +380,25 @@ async function saharaFinal(
   );
 }
 
+function isTemporarySaharaFailure(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return /language not available|wait 30 seconds|temporar|too many|429|503|connection|network|fetch/.test(
+    message,
+  );
+}
+
 export async function transcribeSamples(
   capture: AudioCapture,
   options: { language: string; codeSwitching: boolean; browserTranscript?: string },
 ): Promise<TranscriptionResult> {
   if (capture.streamed && capture.transcript?.trim())
     return { text: capture.transcript.trim(), durationMs: capture.durationMs, requestId: null };
-  return saharaFinal(capture, options);
+  try {
+    return await saharaFinal(capture, options);
+  } catch (error) {
+    if (!isTemporarySaharaFailure(error)) throw error;
+    // Reuse the captured audio once after a temporary Sahara allocation failure.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    return saharaFinal(capture, options);
+  }
 }
