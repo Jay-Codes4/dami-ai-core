@@ -32,6 +32,17 @@ export interface TranscriptionResult {
 const VOICE_WS_URL =
   (import.meta.env.VITE_DAMI_VOICE_WS_URL as string | undefined) ||
   "wss://dami-ai-core-1.onrender.com/stt";
+const VOICE_HEALTH_URL = VOICE_WS_URL.replace(/^wss:/, "https:")
+  .replace(/^ws:/, "http:")
+  .replace(/\/stt(?:\?.*)?$/, "/health");
+
+export async function warmVoiceGateway() {
+  try {
+    await fetch(VOICE_HEALTH_URL, { cache: "no-store", mode: "no-cors" });
+  } catch {
+    // This is only an early cold-start hint; startRecording retains full recovery.
+  }
+}
 
 function toBase64(bytes: Uint8Array) {
   let binary = "";
@@ -295,7 +306,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     const final = socketReady
       ? await Promise.race([
           finalPromise,
-          new Promise<string>((resolve) => setTimeout(() => resolve(transcript), 7000)),
+          new Promise<string>((resolve) => setTimeout(() => resolve(transcript), 1800)),
         ])
       : "";
     try {
@@ -350,12 +361,33 @@ async function saharaFinal(
   capture: AudioCapture,
   options: { language: string; codeSwitching: boolean },
 ) {
-  const form = new FormData();
-  form.set("audio", capture.blob, `dami.${capture.extension}`);
-  form.set("language", options.language || "en");
-  form.set("codeSwitching", String(options.codeSwitching));
-  form.set("durationMs", String(capture.durationMs));
-  const response = await fetch("/api/sahara-stt", { method: "POST", body: form });
+  const wav = new Uint8Array(await capture.blob.arrayBuffer());
+  let pcm = wav,
+    sampleRate = 16000;
+  if (wav.length >= 44 && String.fromCharCode(...wav.subarray(0, 4)) === "RIFF") {
+    const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
+    sampleRate = view.getUint32(24, true) || 16000;
+    let offset = 12;
+    while (offset + 8 <= wav.length) {
+      const id = String.fromCharCode(...wav.subarray(offset, offset + 4));
+      const size = view.getUint32(offset + 4, true);
+      if (id === "data") {
+        pcm = wav.subarray(offset + 8, Math.min(wav.length, offset + 8 + size));
+        break;
+      }
+      offset += 8 + size + (size % 2);
+    }
+  }
+  const response = await fetch("/api/sahara/stt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      audioBase64: toBase64(pcm),
+      sampleRate,
+      language: options.language || "en",
+      codeSwitching: options.codeSwitching,
+    }),
+  });
   const raw = await response.text();
   let payload: {
     text?: string;
