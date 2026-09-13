@@ -3,62 +3,566 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const WINDOW_WIDTH=196, WINDOW_HEIGHT=196, EDGE_GAP=14;
-const DEFAULT_WEB_URL="https://dami-ai-core.vercel.app";
-let win=null,tray=null,wakeProcess=null,localSpeechProcess=null,desktopWatchProcess=null,wakeStatus="starting",isQuitting=false,isDesktopForeground=true;
-function settingsPath(){return path.join(app.getPath("userData"),"desktop-settings.json");}
-function readSettings(){try{return{dock:"bottom",launchAtStartup:true,wakeWordEnabled:true,floatingAvatarEnabled:true,webUrl:DEFAULT_WEB_URL,...JSON.parse(fs.readFileSync(settingsPath(),"utf8"))};}catch{return{dock:"bottom",launchAtStartup:true,wakeWordEnabled:true,floatingAvatarEnabled:true,webUrl:DEFAULT_WEB_URL};}}
-function writeSettings(s){fs.writeFileSync(settingsPath(),JSON.stringify(s,null,2),"utf8");}
-function dockWindow(position){if(!win)return;const d=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()),{x,y,width,height}=d.workArea;win.setBounds({x:x+width-WINDOW_WIDTH-EDGE_GAP,y:position==="top"?y+EDGE_GAP:y+height-WINDOW_HEIGHT-EDGE_GAP,width:WINDOW_WIDTH,height:WINDOW_HEIGHT},true);}
-function syncLoginItem(s){if(process.platform==="win32"||process.platform==="darwin")app.setLoginItemSettings({openAtLogin:s.launchAtStartup!==false});}
-function isTrustedAppUrl(raw){try{const u=new URL(raw);if(u.hostname==="localhost"||u.hostname==="127.0.0.1")return true;return u.origin===new URL(readSettings().webUrl||DEFAULT_WEB_URL).origin;}catch{return false;}}
-function configurePermissions(){const ses=session.defaultSession;ses.setPermissionCheckHandler((_w,p,o)=>p==="media"&&isTrustedAppUrl(o));ses.setPermissionRequestHandler((w,p,cb,d)=>cb(p==="media"&&isTrustedAppUrl(d?.requestingUrl||w.getURL())));}
-function setWakeStatus(s){wakeStatus=s;if(win&&!win.isDestroyed())win.webContents.send("dami:wake-status",s);}
-function stopWakeListener(){if(!wakeProcess)return;try{wakeProcess.kill();}catch{}wakeProcess=null;}
-function stopLocalSpeech(){if(!localSpeechProcess)return;try{localSpeechProcess.kill();}catch{}localSpeechProcess=null;}
-function stopDesktopWatcher(){if(!desktopWatchProcess)return;try{desktopWatchProcess.kill();}catch{}desktopWatchProcess=null;}
-function setDesktopForeground(value){isDesktopForeground=Boolean(value);if(!win||win.isDestroyed())return;const enabled=readSettings().floatingAvatarEnabled!==false;if(isDesktopForeground&&enabled){win.setAlwaysOnTop(true,"floating");if(!win.isVisible())win.showInactive();}else if(win.isVisible())win.hide();}
-function startDesktopWatcher(){
- stopDesktopWatcher();
- if(process.platform!=="win32"){setDesktopForeground(true);return;}
- const member='[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow(); [System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetClassName(System.IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount); [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint lpdwProcessId);';
- const stateLine="$state=if($cls -eq 'Progman' -or $cls -eq 'WorkerW' -or $cls -eq 'Shell_TrayWnd' -or $fgPid -eq "+process.pid+"){'DESKTOP'}else{'APP'}";
- const script=["$ErrorActionPreference='Stop'","Add-Type -Namespace Dami -Name DesktopProbe -MemberDefinition '"+member.replace(/'/g,"''")+"'","$last=''","while($true){$h=[Dami.DesktopProbe]::GetForegroundWindow();$sb=New-Object System.Text.StringBuilder 256;[void][Dami.DesktopProbe]::GetClassName($h,$sb,256);[uint32]$fgPid=0;[void][Dami.DesktopProbe]::GetWindowThreadProcessId($h,[ref]$fgPid);$cls=$sb.ToString();"+stateLine+";if($state -ne $last){[Console]::Out.WriteLine('DAMI_DESKTOP:'+$state);[Console]::Out.Flush();$last=$state};Start-Sleep -Milliseconds 350}"].join("; ");
- desktopWatchProcess=spawn("powershell.exe",["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command",script],{windowsHide:true});
- let buffer="";
- desktopWatchProcess.stdout.on("data",chunk=>{buffer+=chunk.toString();const lines=buffer.split(/\r?\n/);buffer=lines.pop()||"";for(const raw of lines){const line=raw.trim();if(line==="DAMI_DESKTOP:DESKTOP")setDesktopForeground(true);else if(line==="DAMI_DESKTOP:APP")setDesktopForeground(false);}});
- desktopWatchProcess.stderr.on("data",chunk=>console.error("Desktop watcher stderr",chunk.toString()));
- desktopWatchProcess.on("error",error=>{console.error("Desktop watcher error",error);setDesktopForeground(true);});
- desktopWatchProcess.on("exit",()=>{desktopWatchProcess=null;});
+const WINDOW_WIDTH = 196,
+  WINDOW_HEIGHT = 196,
+  EDGE_GAP = 14;
+const DEFAULT_WEB_URL = "https://dami-ai-core.vercel.app";
+let win = null,
+  tray = null,
+  wakeProcess = null,
+  localSpeechProcess = null,
+  desktopWatchProcess = null,
+  wakeStatus = "starting",
+  isQuitting = false,
+  isDesktopForeground = true;
+function settingsPath() {
+  return path.join(app.getPath("userData"), "desktop-settings.json");
 }
-function psRun(script,timeout=15000){return new Promise((resolve,reject)=>{const p=spawn("powershell.exe",["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command",script],{windowsHide:true});let out="",err="";const timer=setTimeout(()=>{try{p.kill();}catch{}reject(new Error("Local speech timed out"));},timeout);p.stdout.on("data",c=>out+=c.toString());p.stderr.on("data",c=>err+=c.toString());p.on("error",e=>{clearTimeout(timer);reject(e);});p.on("exit",code=>{clearTimeout(timer);if(code===0)resolve(out.trim());else reject(new Error(err.trim()||out.trim()||"Local speech recognition failed"));});});}
-function yarnGptPaths(){
- const root=path.join(process.env.LOCALAPPDATA||app.getPath("userData"),"Dami","voice","yarngpt");
- return{root,python:path.join(root,".venv","Scripts","python.exe"),ready:path.join(root,"READY"),worker:path.join(__dirname,"voice","yarngpt_speak.py")};
+function readSettings() {
+  try {
+    return {
+      dock: "bottom",
+      launchAtStartup: true,
+      wakeWordEnabled: true,
+      floatingAvatarEnabled: true,
+      webUrl: DEFAULT_WEB_URL,
+      ...JSON.parse(fs.readFileSync(settingsPath(), "utf8")),
+    };
+  } catch {
+    return {
+      dock: "bottom",
+      launchAtStartup: true,
+      wakeWordEnabled: true,
+      floatingAvatarEnabled: true,
+      webUrl: DEFAULT_WEB_URL,
+    };
+  }
 }
-function speakWithWindows(text){
- const safe=Buffer.from(String(text||""),"utf8").toString("base64");
- const script=["$ErrorActionPreference='Stop'","Add-Type -AssemblyName System.Speech","$s=New-Object System.Speech.Synthesis.SpeechSynthesizer","$voices=$s.GetInstalledVoices() | Where-Object {$_.Enabled}","$preferred=$voices | Where-Object {$_.VoiceInfo.Gender -eq 'Female' -and ($_.VoiceInfo.Culture.Name -eq 'en-NG' -or $_.VoiceInfo.Name -match 'Nigeria|African|Yoruba')} | Select-Object -First 1","if(-not $preferred){$preferred=$voices | Where-Object {$_.VoiceInfo.Gender -eq 'Female' -and $_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq 'en'} | Select-Object -First 1}","if($preferred){$s.SelectVoice($preferred.VoiceInfo.Name)}","$s.Rate=0;$s.Volume=100","$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+safe+"'))","$s.Speak($t)","$s.Dispose()"].join("; ");
- return new Promise((resolve,reject)=>{localSpeechProcess=spawn("powershell.exe",["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command",script],{windowsHide:true});let err="";localSpeechProcess.stderr.on("data",c=>err+=c.toString());localSpeechProcess.on("error",e=>{localSpeechProcess=null;reject(e);});localSpeechProcess.on("exit",code=>{localSpeechProcess=null;if(code===0)resolve(true);else reject(new Error(err.trim()||"Windows local voice failed"));});});
+function writeSettings(s) {
+  fs.writeFileSync(settingsPath(), JSON.stringify(s, null, 2), "utf8");
 }
-function speakWithYarnGpt(text){
- const y=yarnGptPaths();if(!fs.existsSync(y.ready)||!fs.existsSync(y.python)||!fs.existsSync(y.worker))return Promise.reject(new Error("YarnGPT is not installed"));
- return new Promise((resolve,reject)=>{let out="",err="";localSpeechProcess=spawn(y.python,[y.worker],{windowsHide:true});localSpeechProcess.stdout.on("data",c=>out+=c.toString());localSpeechProcess.stderr.on("data",c=>err+=c.toString());localSpeechProcess.on("error",e=>{localSpeechProcess=null;reject(e);});localSpeechProcess.on("exit",code=>{localSpeechProcess=null;if(code!==0)return reject(new Error(err.trim()||"YarnGPT generation failed"));const wav=out.trim().split(/\r?\n/).pop();if(!wav||!fs.existsSync(wav))return reject(new Error("YarnGPT did not produce audio"));const safe=Buffer.from(wav,"utf8").toString("base64");const play="$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+safe+"'));$sp=New-Object System.Media.SoundPlayer $p;$sp.PlaySync();$sp.Dispose()";localSpeechProcess=spawn("powershell.exe",["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command",play],{windowsHide:true});localSpeechProcess.on("error",e=>{localSpeechProcess=null;reject(e);});localSpeechProcess.on("exit",playCode=>{localSpeechProcess=null;if(playCode===0)resolve(true);else reject(new Error("YarnGPT audio playback failed"));});});localSpeechProcess.stdin.end(String(text||""),"utf8");});
+function dockWindow(position) {
+  if (!win) return;
+  const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()),
+    { x, y, width, height } = d.workArea;
+  win.setBounds(
+    {
+      x: x + width - WINDOW_WIDTH - EDGE_GAP,
+      y: position === "top" ? y + EDGE_GAP : y + height - WINDOW_HEIGHT - EDGE_GAP,
+      width: WINDOW_WIDTH,
+      height: WINDOW_HEIGHT,
+    },
+    true,
+  );
 }
-async function localSpeak(text){
- if(process.platform!=="win32")throw new Error("Local voice fallback currently requires Windows");
- stopLocalSpeech();
- try{return await speakWithYarnGpt(text);}catch(error){console.warn("YarnGPT unavailable; using Windows voice fallback:",error?.message||error);return speakWithWindows(text);}
+function syncLoginItem(s) {
+  if (process.platform === "win32" || process.platform === "darwin")
+    app.setLoginItemSettings({ openAtLogin: s.launchAtStartup !== false });
 }
-async function localTranscribe(){
- if(process.platform!=="win32")throw new Error("Local speech fallback currently requires Windows");
- stopWakeListener();setWakeStatus("listening-local");
- const script=["$ErrorActionPreference='Stop'","Add-Type -AssemblyName System.Speech","$installed=[System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers()","if(-not $installed -or $installed.Count -lt 1){throw 'No Windows speech recognizer is installed'}","$info=$installed | Where-Object {$_.Culture.TwoLetterISOLanguageName -eq 'en'} | Select-Object -First 1","if(-not $info){$info=$installed | Select-Object -First 1}","$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine($info.Id)","$r.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar))","$r.SetInputToDefaultAudioDevice()","$result=$r.Recognize([TimeSpan]::FromSeconds(15))","if($null -eq $result -or [string]::IsNullOrWhiteSpace($result.Text)){throw 'I did not hear a clear question'}","[Console]::Out.WriteLine('DAMI_TRANSCRIPT:'+$result.Text)","$r.Dispose()"].join("; ");
- try{const out=await psRun(script,19000);const line=out.split(/\r?\n/).find(x=>x.startsWith("DAMI_TRANSCRIPT:"));if(!line)throw new Error("No local transcript was produced");return line.slice(16).trim();}
- finally{if(!isQuitting)setTimeout(()=>startWakeListener(),350);}
+function isTrustedAppUrl(raw) {
+  try {
+    const u = new URL(raw);
+    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return true;
+    return u.origin === new URL(readSettings().webUrl || DEFAULT_WEB_URL).origin;
+  } catch {
+    return false;
+  }
 }
-function startWakeListener(){stopWakeListener();if(process.platform!=="win32"){setWakeStatus("unsupported");return;}if(readSettings().wakeWordEnabled===false){setWakeStatus("disabled");return;}setWakeStatus("starting");const script=["$ErrorActionPreference='Stop'","try {","Add-Type -AssemblyName System.Speech","$installed=[System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers()","if(-not $installed -or $installed.Count -lt 1){throw 'No Windows speech recognizer is installed'}","$info=$installed | Where-Object {$_.Culture.TwoLetterISOLanguageName -eq 'en'} | Select-Object -First 1","if(-not $info){$info=$installed | Select-Object -First 1}","$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine($info.Id)","$choices=New-Object System.Speech.Recognition.Choices","$choices.Add('hey dami');$choices.Add('hey dummy');$choices.Add('hey demi')","$gb=New-Object System.Speech.Recognition.GrammarBuilder($choices)","$gb.Culture=$info.Culture","$g=New-Object System.Speech.Recognition.Grammar($gb)","$r.LoadGrammar($g)","$r.SetInputToDefaultAudioDevice()","Register-ObjectEvent $r SpeechRecognized -Action {if($Event.SourceEventArgs.Result.Confidence -ge .38){[Console]::Out.WriteLine('DAMI_WAKE');[Console]::Out.Flush()}}|Out-Null","$r.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)","[Console]::Out.WriteLine('DAMI_READY');[Console]::Out.Flush()","while($true){Start-Sleep -Milliseconds 500}","} catch {[Console]::Out.WriteLine('DAMI_ERROR:'+$_.Exception.Message);[Console]::Out.Flush();exit 1}"].join("; ");wakeProcess=spawn("powershell.exe",["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command",script],{windowsHide:true});let b="";wakeProcess.stdout.on("data",c=>{b+=c.toString();const lines=b.split(/\r?\n/);b=lines.pop()||"";for(const raw of lines){const line=raw.trim();if(line==="DAMI_READY")setWakeStatus("ready");else if(line==="DAMI_WAKE"){if(isDesktopForeground)win?.showInactive();win?.webContents.send("dami:wake-word");}else if(line.startsWith("DAMI_ERROR:")){console.error(line);setWakeStatus("error");}}});wakeProcess.stderr.on("data",c=>console.error("Wake listener stderr",c.toString()));wakeProcess.on("error",e=>{console.error(e);setWakeStatus("error");});wakeProcess.on("exit",code=>{wakeProcess=null;if(!isQuitting&&!String(wakeStatus).startsWith("listening")&&wakeStatus!=="error"&&wakeStatus!=="disabled")setWakeStatus(code===0?"stopped":"error");});}
-async function createTray(){if(tray)return;try{tray=new Tray(await app.getFileIcon(process.execPath,{size:"small"}));tray.setToolTip("Dami");tray.setContextMenu(Menu.buildFromTemplate([{label:"Show Dami on desktop",click:()=>{if(isDesktopForeground)win?.showInactive();}},{label:"Hide Dami",click:()=>win?.hide()},{type:"separator"},{label:"Quit Dami",click:()=>{isQuitting=true;app.quit();}}]));tray.on("click",()=>{if(!win)return;if(win.isVisible())win.hide();else if(isDesktopForeground)win.showInactive();});}catch(e){console.error("Could not create tray",e);}}
-function createWindow(){const s=readSettings();syncLoginItem(s);win=new BrowserWindow({width:WINDOW_WIDTH,height:WINDOW_HEIGHT,minWidth:WINDOW_WIDTH,minHeight:WINDOW_HEIGHT,maxWidth:WINDOW_WIDTH,maxHeight:WINDOW_HEIGHT,frame:false,transparent:true,alwaysOnTop:true,resizable:false,hasShadow:false,show:false,skipTaskbar:true,backgroundColor:"#00000000",webPreferences:{preload:path.join(__dirname,"preload.cjs"),contextIsolation:true,nodeIntegration:false,sandbox:true,backgroundThrottling:false}});win.setAlwaysOnTop(true,"floating");const base=app.isPackaged?(process.env.DAMI_DESKTOP_URL||s.webUrl||DEFAULT_WEB_URL):(process.env.DAMI_DESKTOP_URL||"http://localhost:3000");void win.loadURL(`${base.replace(/\/$/,"")}/companion?desktop=1`);dockWindow(s.dock);win.webContents.setWindowOpenHandler(({url})=>{if(url.startsWith("https://"))void shell.openExternal(url);return{action:"deny"};});win.webContents.on("will-navigate",(e,url)=>{if(!isTrustedAppUrl(url))e.preventDefault();});win.once("ready-to-show",()=>{if(isDesktopForeground&&readSettings().floatingAvatarEnabled!==false)win?.showInactive();setWakeStatus(wakeStatus);});win.on("close",e=>{if(!isQuitting){e.preventDefault();win?.hide();}});win.on("closed",()=>win=null);}
-app.whenReady().then(async()=>{configurePermissions();ipcMain.handle("dami:get-dock",()=>readSettings().dock);ipcMain.handle("dami:set-dock",(_e,d)=>{if(!["top","bottom"].includes(d))throw new Error("Invalid dock position");writeSettings({...readSettings(),dock:d});dockWindow(d);return d;});ipcMain.handle("dami:set-launch-at-startup",(_e,v)=>{const s={...readSettings(),launchAtStartup:Boolean(v)};writeSettings(s);syncLoginItem(s);return s.launchAtStartup;});ipcMain.handle("dami:set-wake-word-enabled",(_e,v)=>{const s={...readSettings(),wakeWordEnabled:Boolean(v)};writeSettings(s);if(s.wakeWordEnabled)startWakeListener();else{stopWakeListener();setWakeStatus("disabled");}return s.wakeWordEnabled;});ipcMain.handle("dami:set-floating-avatar-enabled",(_e,v)=>{const s={...readSettings(),floatingAvatarEnabled:Boolean(v)};writeSettings(s);if(s.floatingAvatarEnabled&&isDesktopForeground)win?.showInactive();else win?.hide();return s.floatingAvatarEnabled;});ipcMain.handle("dami:get-desktop-settings",()=>{const s=readSettings();return{desktopDock:s.dock,wakeWordEnabled:s.wakeWordEnabled!==false,floatingAvatarEnabled:s.floatingAvatarEnabled!==false,launchAtStartup:s.launchAtStartup!==false};});ipcMain.handle("dami:get-wake-status",()=>wakeStatus);ipcMain.handle("dami:local-transcribe",()=>localTranscribe());ipcMain.handle("dami:local-speak",(_e,text)=>localSpeak(text));ipcMain.handle("dami:stop-local-speech",()=>{stopLocalSpeech();return true;});ipcMain.handle("dami:show",()=>{if(isDesktopForeground&&readSettings().floatingAvatarEnabled!==false)win?.showInactive();return isDesktopForeground&&readSettings().floatingAvatarEnabled!==false;});ipcMain.handle("dami:hide",()=>{win?.hide();return true;});createWindow();await createTray();startDesktopWatcher();startWakeListener();});
-app.on("before-quit",()=>{isQuitting=true;stopWakeListener();stopLocalSpeech();stopDesktopWatcher();});app.on("window-all-closed",()=>{if(process.platform!=="darwin"&&isQuitting)app.quit();});
+function configurePermissions() {
+  const ses = session.defaultSession;
+  ses.setPermissionCheckHandler((_w, p, o) => p === "media" && isTrustedAppUrl(o));
+  ses.setPermissionRequestHandler((w, p, cb, d) =>
+    cb(p === "media" && isTrustedAppUrl(d?.requestingUrl || w.getURL())),
+  );
+}
+function setWakeStatus(s) {
+  wakeStatus = s;
+  if (win && !win.isDestroyed()) win.webContents.send("dami:wake-status", s);
+}
+function stopWakeListener() {
+  if (!wakeProcess) return;
+  try {
+    wakeProcess.kill();
+  } catch {}
+  wakeProcess = null;
+}
+function stopLocalSpeech() {
+  if (!localSpeechProcess) return;
+  try {
+    localSpeechProcess.kill();
+  } catch {}
+  localSpeechProcess = null;
+}
+function stopDesktopWatcher() {
+  if (!desktopWatchProcess) return;
+  try {
+    desktopWatchProcess.kill();
+  } catch {}
+  desktopWatchProcess = null;
+}
+function setDesktopForeground(value) {
+  isDesktopForeground = Boolean(value);
+  if (!win || win.isDestroyed()) return;
+  const enabled = readSettings().floatingAvatarEnabled !== false;
+  if (isDesktopForeground && enabled) {
+    win.setAlwaysOnTop(true, "floating");
+    if (!win.isVisible()) win.showInactive();
+  } else if (win.isVisible()) win.hide();
+}
+function startDesktopWatcher() {
+  stopDesktopWatcher();
+  if (process.platform !== "win32") {
+    setDesktopForeground(true);
+    return;
+  }
+  const member =
+    '[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr GetForegroundWindow(); [System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)] public static extern int GetClassName(System.IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount); [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint lpdwProcessId);';
+  const stateLine =
+    "$state=if($cls -eq 'Progman' -or $cls -eq 'WorkerW' -or $cls -eq 'Shell_TrayWnd' -or $fgPid -eq " +
+    process.pid +
+    "){'DESKTOP'}else{'APP'}";
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    "Add-Type -Namespace Dami -Name DesktopProbe -MemberDefinition '" +
+      member.replace(/'/g, "''") +
+      "'",
+    "$last=''",
+    "while($true){$h=[Dami.DesktopProbe]::GetForegroundWindow();$sb=New-Object System.Text.StringBuilder 256;[void][Dami.DesktopProbe]::GetClassName($h,$sb,256);[uint32]$fgPid=0;[void][Dami.DesktopProbe]::GetWindowThreadProcessId($h,[ref]$fgPid);$cls=$sb.ToString();" +
+      stateLine +
+      ";if($state -ne $last){[Console]::Out.WriteLine('DAMI_DESKTOP:'+$state);[Console]::Out.Flush();$last=$state};Start-Sleep -Milliseconds 350}",
+  ].join("; ");
+  desktopWatchProcess = spawn(
+    "powershell.exe",
+    ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    { windowsHide: true },
+  );
+  let buffer = "";
+  desktopWatchProcess.stdout.on("data", (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line === "DAMI_DESKTOP:DESKTOP") setDesktopForeground(true);
+      else if (line === "DAMI_DESKTOP:APP") setDesktopForeground(false);
+    }
+  });
+  desktopWatchProcess.stderr.on("data", (chunk) =>
+    console.error("Desktop watcher stderr", chunk.toString()),
+  );
+  desktopWatchProcess.on("error", (error) => {
+    console.error("Desktop watcher error", error);
+    setDesktopForeground(true);
+  });
+  desktopWatchProcess.on("exit", () => {
+    desktopWatchProcess = null;
+  });
+}
+function psRun(script, timeout = 15000) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(
+      "powershell.exe",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        script,
+      ],
+      { windowsHide: true },
+    );
+    let out = "",
+      err = "";
+    const timer = setTimeout(() => {
+      try {
+        p.kill();
+      } catch {}
+      reject(new Error("Local speech timed out"));
+    }, timeout);
+    p.stdout.on("data", (c) => (out += c.toString()));
+    p.stderr.on("data", (c) => (err += c.toString()));
+    p.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    p.on("exit", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(out.trim());
+      else reject(new Error(err.trim() || out.trim() || "Local speech recognition failed"));
+    });
+  });
+}
+function yarnGptPaths() {
+  const root = path.join(
+    process.env.LOCALAPPDATA || app.getPath("userData"),
+    "Dami",
+    "voice",
+    "yarngpt",
+  );
+  return {
+    root,
+    python: path.join(root, ".venv", "Scripts", "python.exe"),
+    ready: path.join(root, "READY"),
+    worker: path.join(__dirname, "voice", "yarngpt_speak.py"),
+  };
+}
+function speakWithWindows(text) {
+  const safe = Buffer.from(String(text || ""), "utf8").toString("base64");
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    "Add-Type -AssemblyName System.Speech",
+    "$s=New-Object System.Speech.Synthesis.SpeechSynthesizer",
+    "$voices=$s.GetInstalledVoices() | Where-Object {$_.Enabled}",
+    "$preferred=$voices | Where-Object {$_.VoiceInfo.Gender -eq 'Female' -and ($_.VoiceInfo.Culture.Name -eq 'en-NG' -or $_.VoiceInfo.Name -match 'Nigeria|African|Yoruba')} | Select-Object -First 1",
+    "if(-not $preferred){$preferred=$voices | Where-Object {$_.VoiceInfo.Gender -eq 'Female' -and $_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq 'en'} | Select-Object -First 1}",
+    "if(-not $preferred){$s.Dispose();throw 'No female Windows voice is installed'}",
+    "$s.SelectVoice($preferred.VoiceInfo.Name)",
+    "$s.Rate=0;$s.Volume=100",
+    "$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + safe + "'))",
+    "$s.Speak($t)",
+    "$s.Dispose()",
+  ].join("; ");
+  return new Promise((resolve, reject) => {
+    localSpeechProcess = spawn(
+      "powershell.exe",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        script,
+      ],
+      { windowsHide: true },
+    );
+    let err = "";
+    localSpeechProcess.stderr.on("data", (c) => (err += c.toString()));
+    localSpeechProcess.on("error", (e) => {
+      localSpeechProcess = null;
+      reject(e);
+    });
+    localSpeechProcess.on("exit", (code) => {
+      localSpeechProcess = null;
+      if (code === 0) resolve(true);
+      else reject(new Error(err.trim() || "Windows local voice failed"));
+    });
+  });
+}
+function speakWithYarnGpt(text) {
+  const y = yarnGptPaths();
+  if (!fs.existsSync(y.ready) || !fs.existsSync(y.python) || !fs.existsSync(y.worker))
+    return Promise.reject(new Error("YarnGPT is not installed"));
+  return new Promise((resolve, reject) => {
+    let out = "",
+      err = "";
+    localSpeechProcess = spawn(y.python, [y.worker], { windowsHide: true });
+    localSpeechProcess.stdout.on("data", (c) => (out += c.toString()));
+    localSpeechProcess.stderr.on("data", (c) => (err += c.toString()));
+    localSpeechProcess.on("error", (e) => {
+      localSpeechProcess = null;
+      reject(e);
+    });
+    localSpeechProcess.on("exit", (code) => {
+      localSpeechProcess = null;
+      if (code !== 0) return reject(new Error(err.trim() || "YarnGPT generation failed"));
+      const wav = out.trim().split(/\r?\n/).pop();
+      if (!wav || !fs.existsSync(wav)) return reject(new Error("YarnGPT did not produce audio"));
+      const safe = Buffer.from(wav, "utf8").toString("base64");
+      const play =
+        "$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" +
+        safe +
+        "'));$sp=New-Object System.Media.SoundPlayer $p;$sp.PlaySync();$sp.Dispose()";
+      localSpeechProcess = spawn(
+        "powershell.exe",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          play,
+        ],
+        { windowsHide: true },
+      );
+      localSpeechProcess.on("error", (e) => {
+        localSpeechProcess = null;
+        reject(e);
+      });
+      localSpeechProcess.on("exit", (playCode) => {
+        localSpeechProcess = null;
+        if (playCode === 0) resolve(true);
+        else reject(new Error("YarnGPT audio playback failed"));
+      });
+    });
+    localSpeechProcess.stdin.end(String(text || ""), "utf8");
+  });
+}
+async function localSpeak(text) {
+  if (process.platform !== "win32")
+    throw new Error("Local voice fallback currently requires Windows");
+  stopLocalSpeech();
+  try {
+    return await speakWithYarnGpt(text);
+  } catch (error) {
+    console.warn("YarnGPT unavailable; using Windows voice fallback:", error?.message || error);
+    return speakWithWindows(text);
+  }
+}
+async function localTranscribe() {
+  if (process.platform !== "win32")
+    throw new Error("Local speech fallback currently requires Windows");
+  stopWakeListener();
+  setWakeStatus("listening-local");
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    "Add-Type -AssemblyName System.Speech",
+    "$installed=[System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers()",
+    "if(-not $installed -or $installed.Count -lt 1){throw 'No Windows speech recognizer is installed'}",
+    "$info=$installed | Where-Object {$_.Culture.TwoLetterISOLanguageName -eq 'en'} | Select-Object -First 1",
+    "if(-not $info){$info=$installed | Select-Object -First 1}",
+    "$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine($info.Id)",
+    "$r.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar))",
+    "$r.SetInputToDefaultAudioDevice()",
+    "$result=$r.Recognize([TimeSpan]::FromSeconds(15))",
+    "if($null -eq $result -or [string]::IsNullOrWhiteSpace($result.Text)){throw 'I did not hear a clear question'}",
+    "[Console]::Out.WriteLine('DAMI_TRANSCRIPT:'+$result.Text)",
+    "$r.Dispose()",
+  ].join("; ");
+  try {
+    const out = await psRun(script, 19000);
+    const line = out.split(/\r?\n/).find((x) => x.startsWith("DAMI_TRANSCRIPT:"));
+    if (!line) throw new Error("No local transcript was produced");
+    return line.slice(16).trim();
+  } finally {
+    if (!isQuitting) setTimeout(() => startWakeListener(), 350);
+  }
+}
+function startWakeListener() {
+  stopWakeListener();
+  if (process.platform !== "win32") {
+    setWakeStatus("unsupported");
+    return;
+  }
+  if (readSettings().wakeWordEnabled === false) {
+    setWakeStatus("disabled");
+    return;
+  }
+  setWakeStatus("starting");
+  const script = [
+    "$ErrorActionPreference='Stop'",
+    "try {",
+    "Add-Type -AssemblyName System.Speech",
+    "$installed=[System.Speech.Recognition.SpeechRecognitionEngine]::InstalledRecognizers()",
+    "if(-not $installed -or $installed.Count -lt 1){throw 'No Windows speech recognizer is installed'}",
+    "$info=$installed | Where-Object {$_.Culture.TwoLetterISOLanguageName -eq 'en'} | Select-Object -First 1",
+    "if(-not $info){$info=$installed | Select-Object -First 1}",
+    "$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine($info.Id)",
+    "$choices=New-Object System.Speech.Recognition.Choices",
+    "$choices.Add('hey dami');$choices.Add('hey dummy');$choices.Add('hey demi')",
+    "$gb=New-Object System.Speech.Recognition.GrammarBuilder($choices)",
+    "$gb.Culture=$info.Culture",
+    "$g=New-Object System.Speech.Recognition.Grammar($gb)",
+    "$r.LoadGrammar($g)",
+    "$r.SetInputToDefaultAudioDevice()",
+    "Register-ObjectEvent $r SpeechRecognized -Action {if($Event.SourceEventArgs.Result.Confidence -ge .38){[Console]::Out.WriteLine('DAMI_WAKE');[Console]::Out.Flush()}}|Out-Null",
+    "$r.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)",
+    "[Console]::Out.WriteLine('DAMI_READY');[Console]::Out.Flush()",
+    "while($true){Start-Sleep -Milliseconds 500}",
+    "} catch {[Console]::Out.WriteLine('DAMI_ERROR:'+$_.Exception.Message);[Console]::Out.Flush();exit 1}",
+  ].join("; ");
+  wakeProcess = spawn(
+    "powershell.exe",
+    ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    { windowsHide: true },
+  );
+  let b = "";
+  wakeProcess.stdout.on("data", (c) => {
+    b += c.toString();
+    const lines = b.split(/\r?\n/);
+    b = lines.pop() || "";
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (line === "DAMI_READY") setWakeStatus("ready");
+      else if (line === "DAMI_WAKE") {
+        if (isDesktopForeground) win?.showInactive();
+        win?.webContents.send("dami:wake-word");
+      } else if (line.startsWith("DAMI_ERROR:")) {
+        console.error(line);
+        setWakeStatus("error");
+      }
+    }
+  });
+  wakeProcess.stderr.on("data", (c) => console.error("Wake listener stderr", c.toString()));
+  wakeProcess.on("error", (e) => {
+    console.error(e);
+    setWakeStatus("error");
+  });
+  wakeProcess.on("exit", (code) => {
+    wakeProcess = null;
+    if (
+      !isQuitting &&
+      !String(wakeStatus).startsWith("listening") &&
+      wakeStatus !== "error" &&
+      wakeStatus !== "disabled"
+    )
+      setWakeStatus(code === 0 ? "stopped" : "error");
+  });
+}
+async function createTray() {
+  if (tray) return;
+  try {
+    tray = new Tray(await app.getFileIcon(process.execPath, { size: "small" }));
+    tray.setToolTip("Dami");
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        {
+          label: "Show Dami on desktop",
+          click: () => {
+            if (isDesktopForeground) win?.showInactive();
+          },
+        },
+        { label: "Hide Dami", click: () => win?.hide() },
+        { type: "separator" },
+        {
+          label: "Quit Dami",
+          click: () => {
+            isQuitting = true;
+            app.quit();
+          },
+        },
+      ]),
+    );
+    tray.on("click", () => {
+      if (!win) return;
+      if (win.isVisible()) win.hide();
+      else if (isDesktopForeground) win.showInactive();
+    });
+  } catch (e) {
+    console.error("Could not create tray", e);
+  }
+}
+function createWindow() {
+  const s = readSettings();
+  syncLoginItem(s);
+  win = new BrowserWindow({
+    width: WINDOW_WIDTH,
+    height: WINDOW_HEIGHT,
+    minWidth: WINDOW_WIDTH,
+    minHeight: WINDOW_HEIGHT,
+    maxWidth: WINDOW_WIDTH,
+    maxHeight: WINDOW_HEIGHT,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    hasShadow: false,
+    show: false,
+    skipTaskbar: true,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+    },
+  });
+  win.setAlwaysOnTop(true, "floating");
+  const base = app.isPackaged
+    ? process.env.DAMI_DESKTOP_URL || s.webUrl || DEFAULT_WEB_URL
+    : process.env.DAMI_DESKTOP_URL || "http://localhost:3000";
+  void win.loadURL(`${base.replace(/\/$/, "")}/companion?desktop=1`);
+  dockWindow(s.dock);
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https://")) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (e, url) => {
+    if (!isTrustedAppUrl(url)) e.preventDefault();
+  });
+  win.once("ready-to-show", () => {
+    if (isDesktopForeground && readSettings().floatingAvatarEnabled !== false) win?.showInactive();
+    setWakeStatus(wakeStatus);
+  });
+  win.on("close", (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      win?.hide();
+    }
+  });
+  win.on("closed", () => (win = null));
+}
+app.whenReady().then(async () => {
+  configurePermissions();
+  ipcMain.handle("dami:get-dock", () => readSettings().dock);
+  ipcMain.handle("dami:set-dock", (_e, d) => {
+    if (!["top", "bottom"].includes(d)) throw new Error("Invalid dock position");
+    writeSettings({ ...readSettings(), dock: d });
+    dockWindow(d);
+    return d;
+  });
+  ipcMain.handle("dami:set-launch-at-startup", (_e, v) => {
+    const s = { ...readSettings(), launchAtStartup: Boolean(v) };
+    writeSettings(s);
+    syncLoginItem(s);
+    return s.launchAtStartup;
+  });
+  ipcMain.handle("dami:set-wake-word-enabled", (_e, v) => {
+    const s = { ...readSettings(), wakeWordEnabled: Boolean(v) };
+    writeSettings(s);
+    if (s.wakeWordEnabled) startWakeListener();
+    else {
+      stopWakeListener();
+      setWakeStatus("disabled");
+    }
+    return s.wakeWordEnabled;
+  });
+  ipcMain.handle("dami:set-floating-avatar-enabled", (_e, v) => {
+    const s = { ...readSettings(), floatingAvatarEnabled: Boolean(v) };
+    writeSettings(s);
+    if (s.floatingAvatarEnabled && isDesktopForeground) win?.showInactive();
+    else win?.hide();
+    return s.floatingAvatarEnabled;
+  });
+  ipcMain.handle("dami:get-desktop-settings", () => {
+    const s = readSettings();
+    return {
+      desktopDock: s.dock,
+      wakeWordEnabled: s.wakeWordEnabled !== false,
+      floatingAvatarEnabled: s.floatingAvatarEnabled !== false,
+      launchAtStartup: s.launchAtStartup !== false,
+    };
+  });
+  ipcMain.handle("dami:get-wake-status", () => wakeStatus);
+  ipcMain.handle("dami:local-transcribe", () => localTranscribe());
+  ipcMain.handle("dami:local-speak", (_e, text) => localSpeak(text));
+  ipcMain.handle("dami:stop-local-speech", () => {
+    stopLocalSpeech();
+    return true;
+  });
+  ipcMain.handle("dami:show", () => {
+    if (isDesktopForeground && readSettings().floatingAvatarEnabled !== false) win?.showInactive();
+    return isDesktopForeground && readSettings().floatingAvatarEnabled !== false;
+  });
+  ipcMain.handle("dami:hide", () => {
+    win?.hide();
+    return true;
+  });
+  createWindow();
+  await createTray();
+  startDesktopWatcher();
+  startWakeListener();
+});
+app.on("before-quit", () => {
+  isQuitting = true;
+  stopWakeListener();
+  stopLocalSpeech();
+  stopDesktopWatcher();
+});
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin" && isQuitting) app.quit();
+});

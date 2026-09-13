@@ -1,10 +1,238 @@
 /** Browser-side Dami speech. Sahara female African voice is primary; desktop local voice is immediate fallback. */
-export interface SpeechHandle{stop():void;pause():void;resume():void;isPaused():boolean;started:Promise<void>;ended:Promise<void>}
-type VoiceOptions={accent:string;gender:string;language:string};type DesktopVoiceBridge={isDesktop?:boolean;localSpeak?:(text:string)=>Promise<boolean>;stopLocalSpeech?:()=>Promise<boolean>};
-function cleanSpeechText(text:string){return text.replace(/\[(?:S\d+)\]/g,"").replace(/^\s*(?:#{1,6}\s*)?(?:\*\*)?(?:short\s+answer|direct\s+answer|answer)(?:\*\*)?\s*[:\-]?\s*/i,"").replace(/(^|\n)#{1,6}\s+/g,"$1").replace(/\*\*|__|`/g,"").replace(/^\s*[-*+]\s+/gm,"").replace(/\|/g,", ").replace(/\s{2,}/g," ").replace(/\s+([,.!?])/g,"$1").trim();}
-function normaliseVoice(o:VoiceOptions):VoiceOptions{if(o.language==="sw")return{language:"sw",accent:"swahili",gender:"female"};if(o.language==="yo")return{language:"yo",accent:"yoruba",gender:"female"};if(o.language==="pcm")return{language:"pcm",accent:"pidgin",gender:"female"};return{language:"en",accent:o.accent||"yoruba",gender:"female"};}
-function browserSpeech(text:string,o:VoiceOptions):SpeechHandle{if(typeof window==="undefined"||!("speechSynthesis"in window))throw new Error("Dami couldn't play voice on this browser.");window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(cleanSpeechText(text));u.lang=o.language==="en"?"en-NG":o.language;u.rate=1.08;u.pitch=1.02;const voices=window.speechSynthesis.getVoices(),preferred=voices.find(v=>/female|woman|aria|jenny|zira/i.test(v.name)&&/en|nigeria|yoruba|africa/i.test(`${v.name} ${v.lang}`))??voices.find(v=>!/male/i.test(v.name)&&v.lang.toLowerCase().startsWith("en"));if(preferred)u.voice=preferred;let settled=false,paused=false,startedDone=false;let rs!:()=>void,re!:()=>void;const started=new Promise<void>(r=>rs=r),ended=new Promise<void>(r=>re=r),mark=()=>{if(!startedDone){startedDone=true;rs();}},finish=()=>{mark();if(!settled){settled=true;re();}};u.addEventListener("start",mark,{once:true});u.addEventListener("end",finish,{once:true});u.addEventListener("error",finish,{once:true});window.speechSynthesis.speak(u);return{stop(){window.speechSynthesis.cancel();paused=false;finish();},pause(){if(!settled&&!paused){window.speechSynthesis.pause();paused=true;}},resume(){if(!settled&&paused){window.speechSynthesis.resume();paused=false;}},isPaused:()=>paused,started,ended};}
-function nativeDesktopSpeech(text:string):SpeechHandle|null{if(typeof window==="undefined")return null;const bridge=(window as typeof window&{damiDesktop?:DesktopVoiceBridge}).damiDesktop;if(!bridge?.isDesktop||!bridge.localSpeak)return null;let settled=false;let rs!:()=>void,re!:()=>void;const started=new Promise<void>(r=>rs=r),ended=new Promise<void>(r=>re=r);rs();void bridge.localSpeak(cleanSpeechText(text)).catch(()=>undefined).finally(()=>{if(!settled){settled=true;re();}});return{stop(){void bridge.stopLocalSpeech?.();if(!settled){settled=true;re();}},pause(){},resume(){},isPaused:()=>false,started,ended};}
-async function requestSahara(text:string,o:VoiceOptions){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),1800);try{const response=await fetch("/api/sahara-tts",{method:"POST",signal:controller.signal,headers:{"Content-Type":"application/json"},body:JSON.stringify({text,...o,gender:"female"})});if(!response.ok)return null;const blob=await response.blob();return blob.size?blob:null;}catch{return null;}finally{clearTimeout(timer);}}
-async function saharaSpeech(text:string,o:VoiceOptions):Promise<SpeechHandle|null>{const clean=cleanSpeechText(text);if(!clean)return null;const first=(clean.match(/^.{1,180}?(?:[.!?](?:\s|$)|$)/)?.[0]||clean.slice(0,180)).trim(),rest=clean.slice(first.length).trim();const firstBlob=await requestSahara(first,o);if(!firstBlob)return null;const firstUrl=URL.createObjectURL(firstBlob),firstAudio=new Audio(firstUrl);firstAudio.preload="auto";firstAudio.playbackRate=1.04;let stopped=false,paused=false,settled=false,current=firstAudio;let rs!:()=>void,re!:()=>void;const started=new Promise<void>(r=>rs=r),ended=new Promise<void>(r=>re=r);const restPromise=rest?requestSahara(rest,o):Promise.resolve(null);const play=async(audio:HTMLAudioElement)=>{current=audio;audio.addEventListener("playing",rs,{once:true});await audio.play();await new Promise<void>((resolve,reject)=>{audio.addEventListener("ended",()=>resolve(),{once:true});audio.addEventListener("error",()=>reject(new Error("playback")),{once:true});});};void(async()=>{try{await play(firstAudio);if(!stopped&&rest){const blob=await restPromise;if(!blob)throw new Error("voice");const url=URL.createObjectURL(blob),audio=new Audio(url);audio.playbackRate=1.04;await play(audio);URL.revokeObjectURL(url);}}catch{if(!stopped){const fallback=nativeDesktopSpeech(rest||clean)??browserSpeech(rest||clean,o);await fallback.ended;}}finally{URL.revokeObjectURL(firstUrl);if(!settled){settled=true;re();}}})();return{stop(){stopped=true;current.pause();if(!settled){settled=true;re();}},pause(){if(!paused){paused=true;current.pause();}},resume(){if(paused){paused=false;void current.play();}},isPaused:()=>paused,started,ended};}
-export async function speak(text:string,requested:VoiceOptions):Promise<SpeechHandle>{const clean=cleanSpeechText(text),o=normaliseVoice(requested);const desktop=nativeDesktopSpeech(clean);if(desktop)return desktop;return(await saharaSpeech(clean,o).catch(()=>null))??browserSpeech(clean,o);}
+export interface SpeechHandle {
+  stop(): void;
+  pause(): void;
+  resume(): void;
+  isPaused(): boolean;
+  started: Promise<void>;
+  ended: Promise<void>;
+}
+type VoiceOptions = { accent: string; gender: string; language: string };
+type DesktopVoiceBridge = {
+  isDesktop?: boolean;
+  localSpeak?: (text: string) => Promise<boolean>;
+  stopLocalSpeech?: () => Promise<boolean>;
+};
+function cleanSpeechText(text: string) {
+  return text
+    .replace(/\[(?:S\d+)\]/g, "")
+    .replace(
+      /^\s*(?:#{1,6}\s*)?(?:\*\*)?(?:short\s+answer|direct\s+answer|answer)(?:\*\*)?\s*[:-]?\s*/i,
+      "",
+    )
+    .replace(/(^|\n)#{1,6}\s+/g, "$1")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/\|/g, ", ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.!?])/g, "$1")
+    .trim();
+}
+function normaliseVoice(o: VoiceOptions): VoiceOptions {
+  if (o.language === "sw") return { language: "sw", accent: "swahili", gender: "female" };
+  if (o.language === "yo") return { language: "yo", accent: "yoruba", gender: "female" };
+  if (o.language === "pcm") return { language: "pcm", accent: "pidgin", gender: "female" };
+  return { language: "en", accent: o.accent || "yoruba", gender: "female" };
+}
+function browserSpeech(text: string, o: VoiceOptions): SpeechHandle {
+  if (typeof window === "undefined" || !("speechSynthesis" in window))
+    throw new Error("Dami couldn't play voice on this browser.");
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(cleanSpeechText(text));
+  u.lang = o.language === "en" ? "en-NG" : o.language;
+  u.rate = 1.08;
+  u.pitch = 1.02;
+  const voices = window.speechSynthesis.getVoices(),
+    preferred =
+      voices.find(
+        (v) =>
+          /female|woman|aria|jenny|zira/i.test(v.name) &&
+          /en|nigeria|yoruba|africa/i.test(`${v.name} ${v.lang}`),
+      ) ?? voices.find((v) => !/male/i.test(v.name) && v.lang.toLowerCase().startsWith("en"));
+  if (preferred) u.voice = preferred;
+  let settled = false,
+    paused = false,
+    startedDone = false;
+  let rs!: () => void, re!: () => void;
+  const started = new Promise<void>((r) => (rs = r)),
+    ended = new Promise<void>((r) => (re = r)),
+    mark = () => {
+      if (!startedDone) {
+        startedDone = true;
+        rs();
+      }
+    },
+    finish = () => {
+      mark();
+      if (!settled) {
+        settled = true;
+        re();
+      }
+    };
+  u.addEventListener("start", mark, { once: true });
+  u.addEventListener("end", finish, { once: true });
+  u.addEventListener("error", finish, { once: true });
+  window.speechSynthesis.speak(u);
+  return {
+    stop() {
+      window.speechSynthesis.cancel();
+      paused = false;
+      finish();
+    },
+    pause() {
+      if (!settled && !paused) {
+        window.speechSynthesis.pause();
+        paused = true;
+      }
+    },
+    resume() {
+      if (!settled && paused) {
+        window.speechSynthesis.resume();
+        paused = false;
+      }
+    },
+    isPaused: () => paused,
+    started,
+    ended,
+  };
+}
+function nativeDesktopSpeech(text: string): SpeechHandle | null {
+  if (typeof window === "undefined") return null;
+  const bridge = (window as typeof window & { damiDesktop?: DesktopVoiceBridge }).damiDesktop;
+  if (!bridge?.isDesktop || !bridge.localSpeak) return null;
+  let settled = false;
+  let rs!: () => void, re!: () => void;
+  const started = new Promise<void>((r) => (rs = r)),
+    ended = new Promise<void>((r) => (re = r));
+  rs();
+  void bridge
+    .localSpeak(cleanSpeechText(text))
+    .catch(() => undefined)
+    .finally(() => {
+      if (!settled) {
+        settled = true;
+        re();
+      }
+    });
+  return {
+    stop() {
+      void bridge.stopLocalSpeech?.();
+      if (!settled) {
+        settled = true;
+        re();
+      }
+    },
+    pause() {},
+    resume() {},
+    isPaused: () => false,
+    started,
+    ended,
+  };
+}
+async function requestSahara(text: string, o: VoiceOptions) {
+  const controller = new AbortController(),
+    // A cold Sahara worker can take a few seconds. The former 1.8s cutoff
+    // caused healthy female voice requests to fall back to a local system voice.
+    timer = setTimeout(() => controller.abort(), 14000);
+  try {
+    const response = await fetch("/api/sahara-tts", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, ...o, gender: "female" }),
+    });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return blob.size ? blob : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle | null> {
+  const clean = cleanSpeechText(text);
+  if (!clean) return null;
+  const first = (clean.match(/^.{1,180}?(?:[.!?](?:\s|$)|$)/)?.[0] || clean.slice(0, 180)).trim(),
+    rest = clean.slice(first.length).trim();
+  const firstBlob = await requestSahara(first, o);
+  if (!firstBlob) return null;
+  const firstUrl = URL.createObjectURL(firstBlob),
+    firstAudio = new Audio(firstUrl);
+  firstAudio.preload = "auto";
+  firstAudio.playbackRate = 1.04;
+  let stopped = false,
+    paused = false,
+    settled = false,
+    current = firstAudio;
+  let rs!: () => void, re!: () => void;
+  const started = new Promise<void>((r) => (rs = r)),
+    ended = new Promise<void>((r) => (re = r));
+  const restPromise = rest ? requestSahara(rest, o) : Promise.resolve(null);
+  const play = async (audio: HTMLAudioElement) => {
+    current = audio;
+    audio.addEventListener("playing", rs, { once: true });
+    await audio.play();
+    await new Promise<void>((resolve, reject) => {
+      audio.addEventListener("ended", () => resolve(), { once: true });
+      audio.addEventListener("error", () => reject(new Error("playback")), { once: true });
+    });
+  };
+  void (async () => {
+    try {
+      await play(firstAudio);
+      if (!stopped && rest) {
+        const blob = await restPromise;
+        if (!blob) throw new Error("voice");
+        const url = URL.createObjectURL(blob),
+          audio = new Audio(url);
+        audio.playbackRate = 1.04;
+        await play(audio);
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      if (!stopped) {
+        const fallback = nativeDesktopSpeech(rest || clean) ?? browserSpeech(rest || clean, o);
+        await fallback.ended;
+      }
+    } finally {
+      URL.revokeObjectURL(firstUrl);
+      if (!settled) {
+        settled = true;
+        re();
+      }
+    }
+  })();
+  return {
+    stop() {
+      stopped = true;
+      current.pause();
+      if (!settled) {
+        settled = true;
+        re();
+      }
+    },
+    pause() {
+      if (!paused) {
+        paused = true;
+        current.pause();
+      }
+    },
+    resume() {
+      if (paused) {
+        paused = false;
+        void current.play();
+      }
+    },
+    isPaused: () => paused,
+    started,
+    ended,
+  };
+}
+export async function speak(text: string, requested: VoiceOptions): Promise<SpeechHandle> {
+  const clean = cleanSpeechText(text),
+    o = normaliseVoice(requested);
+  const sahara = await saharaSpeech(clean, o).catch(() => null);
+  if (sahara) return sahara;
+  return nativeDesktopSpeech(clean) ?? browserSpeech(clean, o);
+}
