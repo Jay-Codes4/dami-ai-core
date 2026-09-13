@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DamiAvatar } from "@/components/DamiAvatar";
 import { useVoiceSession } from "@/hooks/useVoiceSession";
 import { storage } from "@/lib/storage";
+import { playListeningEndCue } from "@/services/voice/listeningCue";
 
 export const Route = createFileRoute("/companion")({ component: Companion });
 type RecognitionEvent = { results: ArrayLike<{ 0: { transcript: string } }> };
@@ -20,9 +21,10 @@ type Recognition = {
 type RecognitionCtor = new () => Recognition;
 type WakeStatus =
   "starting" | "ready" | "error" | "unsupported" | "disabled" | "stopped" | "listening-local";
+type WakePayload = { command?: string; audioBase64?: string };
 type DesktopBridge = {
   isDesktop?: boolean;
-  onWakeWord?: (cb: () => void) => void | (() => void);
+  onWakeWord?: (cb: (payload: WakePayload) => void) => void | (() => void);
   onTalkRequest?: (cb: () => void) => void | (() => void);
   getWakeStatus?: () => Promise<WakeStatus>;
   onWakeStatus?: (cb: (s: WakeStatus) => void) => void | (() => void);
@@ -34,7 +36,16 @@ type DesktopBridge = {
   reportVoiceStage?: (stage: string, error?: string) => Promise<boolean>;
 };
 function Companion() {
-  const { startListening, stopSpeaking, robotState, level, stage, statusText } = useVoiceSession();
+  const {
+    startListening,
+    stopSpeaking,
+    askWakeCapture,
+    ask,
+    robotState,
+    level,
+    stage,
+    statusText,
+  } = useVoiceSession();
   const recognitionRef = useRef<Recognition | null>(null),
     stageRef = useRef(stage),
     activatingRef = useRef(false),
@@ -72,25 +83,39 @@ function Companion() {
       body.style.margin = previous.bodyMargin;
     };
   }, []);
-  const activate = useCallback(async () => {
-    if (activatingRef.current) return;
-    if (stageRef.current === "speaking") stopSpeaking();
-    else if (!["idle", "answered", "error"].includes(stageRef.current)) return;
-    activatingRef.current = true;
-    recognitionRef.current?.stop();
-    const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
-    try {
-      if (bridge?.isDesktop) {
-        desktopTurnRef.current = true;
-        await bridge.beginVoiceTurn?.();
+  const activate = useCallback(
+    async (wake?: WakePayload) => {
+      if (activatingRef.current) return;
+      if (stageRef.current === "speaking") stopSpeaking();
+      else if (!["idle", "answered", "error"].includes(stageRef.current)) return;
+      activatingRef.current = true;
+      recognitionRef.current?.stop();
+      const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
+      try {
+        if (bridge?.isDesktop) {
+          desktopTurnRef.current = true;
+          await bridge.beginVoiceTurn?.();
+        }
+        const command = wake?.command?.trim() || "";
+        if (command) {
+          void playListeningEndCue();
+          if (wake?.audioBase64) await askWakeCapture(wake.audioBase64, command);
+          else await ask(command);
+          return;
+        }
+        if (wake && bridge?.localSpeak) {
+          await bridge.localSpeak("How can I help you today?").catch(() => false);
+        }
+        // Open the microphone immediately. A spoken greeting delayed capture and
+        // could be transcribed as the user's question on slower machines. The
+        // short greeting above is used only for a wake phrase with no command.
+        await startListening();
+      } finally {
+        activatingRef.current = false;
       }
-      // Open the microphone immediately. A spoken greeting delayed capture and
-      // could be transcribed as the user's question on slower machines.
-      await startListening();
-    } finally {
-      activatingRef.current = false;
-    }
-  }, [startListening, stopSpeaking]);
+    },
+    [ask, askWakeCapture, startListening, stopSpeaking],
+  );
   useEffect(() => {
     if (!desktopTurnRef.current || !["answered", "error"].includes(stage)) return;
     desktopTurnRef.current = false;
@@ -111,7 +136,7 @@ function Companion() {
       sc: void | (() => void),
       cancelled = false;
     setWakeAvailable(true);
-    if (bridge.onWakeWord) wc = bridge.onWakeWord(() => void activate());
+    if (bridge.onWakeWord) wc = bridge.onWakeWord((payload) => void activate(payload));
     if (bridge.onTalkRequest) tc = bridge.onTalkRequest(() => void activate());
     if (bridge.onWakeStatus)
       sc = bridge.onWakeStatus((s) => {
