@@ -8,10 +8,11 @@ import {
   speak,
   startRecording,
   transcribeSamples,
+  warmVoiceGateway,
   type Recorder,
   type SpeechHandle,
 } from "@/services/sahara/browser";
-import { playListeningCue } from "@/services/voice/listeningCue";
+import { playListeningCue, playListeningEndCue } from "@/services/voice/listeningCue";
 import type { DamiState, ResearchAnswer, ResearchSession, VoiceStage } from "@/lib/types";
 
 const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
@@ -36,9 +37,9 @@ export const STAGE_LABEL: Record<VoiceStage, string> = {
   speaking: "I'm speaking...",
   error: "Something went wrong.",
 };
-const END_OF_SPEECH_SILENCE_MS = 1000,
-  LISTENING_GRACE_MS = 400,
-  SPEECH_CONFIRM_MS = 120,
+const END_OF_SPEECH_SILENCE_MS = 650,
+  LISTENING_GRACE_MS = 280,
+  SPEECH_CONFIRM_MS = 90,
   MIN_SPEECH_THRESHOLD = 0.032,
   NOISE_MULTIPLIER = 2,
   NOISE_MARGIN = 0.016;
@@ -66,6 +67,23 @@ export function useVoiceSession() {
   useEffect(() => {
     const t = setTimeout(() => setStage((c) => (c === "welcome" ? "idle" : c)), 1200);
     return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    // Start a sleeping gateway while the user is reading the page instead of
+    // making their first spoken word pay the cold-start cost.
+    void warmVoiceGateway();
+    const warm = () => {
+      if (document.visibilityState === "visible" || window.damiDesktop?.isDesktop)
+        void warmVoiceGateway();
+    };
+    const timer = window.setInterval(warm, 10 * 60 * 1000);
+    window.addEventListener("focus", warm);
+    document.addEventListener("visibilitychange", warm);
+    return () => {
+      window.removeEventListener("focus", warm);
+      document.removeEventListener("visibilitychange", warm);
+      window.clearInterval(timer);
+    };
   }, []);
   useEffect(
     () => () => {
@@ -163,10 +181,10 @@ export function useVoiceSession() {
         };
         storage.saveSession(record);
         setSession(record);
+        setAnswer(result);
         if (storage.getSettings().speakAnswers) {
-          void readAloud(result.answer, () => setAnswer(result));
+          void readAloud(result.answer);
         } else {
-          setAnswer(result);
           setStage("answered");
         }
       } catch (err) {
@@ -185,6 +203,7 @@ export function useVoiceSession() {
   const processRecording = useCallback(
     async (recorder: Recorder) => {
       stopLevelMeter();
+      void playListeningEndCue();
       const browserTranscript = recorder.transcript().trim();
       if (browserTranscript) setPartial(browserTranscript);
       setStage("transcribing");
@@ -215,6 +234,51 @@ export function useVoiceSession() {
       }
     },
     [ask, stopLevelMeter],
+  );
+  const askWakeCapture = useCallback(
+    async (audioBase64: string, fallbackText: string) => {
+      const fallback = fallbackText.trim();
+      setError(null);
+      setAnswer(null);
+      setPartial(fallback);
+      setStage("transcribing");
+      try {
+        const binary = atob(audioBase64),
+          bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+        const settings = storage.getSettings(),
+          language = getDamiLanguage(settings.speechLanguage),
+          result = await transcribeSamples(
+            {
+              blob: new Blob([bytes], { type: "audio/wav" }),
+              mimeType: "audio/wav",
+              extension: "wav",
+              durationMs: Math.max(250, Math.round((bytes.length / 32000) * 1000)),
+            },
+            {
+              language: language.code,
+              codeSwitching: language.codeSwitched,
+              browserTranscript: fallback,
+            },
+          );
+        const transcript = result.text
+          .replace(/^\s*(?:(?:hey|hi|okay)\s+)?(?:dami|dummy|demi|dammy|darmi)\b[,.:;\s-]*/i, "")
+          .trim();
+        setPartial("");
+        await ask(transcript || fallback);
+      } catch (err) {
+        // The OS transcript is only a resilience fallback; Sahara remains the
+        // primary transcription path for a wake phrase plus command.
+        if (fallback) {
+          setPartial("");
+          await ask(fallback);
+          return;
+        }
+        setError(err instanceof Error ? err.message : "I couldn't transcribe that wake request.");
+        setStage("error");
+      }
+    },
+    [ask],
   );
   const startListening = useCallback(async () => {
     cancelled.current = false;
@@ -319,6 +383,7 @@ export function useVoiceSession() {
     speechPaused,
     isBusy: stage === "transcribing" || stage === "researching",
     startListening,
+    askWakeCapture,
     stopListening,
     cancelListening,
     ask,
