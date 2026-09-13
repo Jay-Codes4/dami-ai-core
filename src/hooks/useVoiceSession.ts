@@ -17,7 +17,7 @@ import type { DamiState, ResearchAnswer, ResearchSession, VoiceStage } from "@/l
 const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
   welcome: "welcome",
   idle: "idle",
-  "requesting-permission": "idle",
+  "requesting-permission": "listening",
   listening: "listening",
   transcribing: "thinking",
   researching: "thinking",
@@ -28,7 +28,7 @@ const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
 export const STAGE_LABEL: Record<VoiceStage, string> = {
   welcome: "Hi, I'm Dami. Talk to me when you're ready.",
   idle: "Ready when you are.",
-  "requesting-permission": "Waiting for microphone permission...",
+  "requesting-permission": "Opening your microphone...",
   listening: "I'm listening. Just speak naturally and I'll know when you're done.",
   transcribing: "Finishing your transcript...",
   researching: "I'm checking the law and the strongest available authorities...",

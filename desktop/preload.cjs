@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("damiDesktop", {
   getWakeStatus: () => ipcRenderer.invoke("dami:get-wake-status"),
   beginVoiceTurn: () => ipcRenderer.invoke("dami:begin-voice-turn"),
   endVoiceTurn: () => ipcRenderer.invoke("dami:end-voice-turn"),
+  reportVoiceStage: (stage, error) => ipcRenderer.invoke("dami:voice-stage", stage, error),
   localTranscribe: () => ipcRenderer.invoke("dami:local-transcribe"),
   localSpeak: (text) => ipcRenderer.invoke("dami:local-speak", text),
   stopLocalSpeech: () => ipcRenderer.invoke("dami:stop-local-speech"),
