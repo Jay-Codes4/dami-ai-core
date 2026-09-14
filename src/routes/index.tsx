@@ -59,9 +59,9 @@ function Home() {
             African legal intelligence you can talk to
           </h1>
           <p className="mx-auto max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-            Speak naturally in English, Igbo, Nigerian Pidgin, or mix them in one sentence. Dami
-            preserves your transcript, researches the law and returns a sourced answer in her
-            African female voice.
+            Speak naturally in English and supported African languages, including code-switching
+            within the same sentence. Dami preserves your transcript, researches the law and returns
+            a sourced answer in her African female voice.
           </p>
         </div>
         <div className="grid w-full max-w-sm gap-2 sm:flex sm:max-w-none sm:w-auto sm:items-center sm:justify-center sm:gap-3">
