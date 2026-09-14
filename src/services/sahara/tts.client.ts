@@ -279,16 +279,19 @@ function splitForSahara(text: string) {
   let current = "";
   for (const sourceWord of words) {
     let word = sourceWord;
-    while (word.length > 96) {
+    let limit = chunks.length === 0 ? 56 : 96;
+    while (word.length > limit) {
       if (current) {
         chunks.push(current);
         current = "";
+        limit = 96;
       }
-      chunks.push(word.slice(0, 96));
-      word = word.slice(96);
+      chunks.push(word.slice(0, limit));
+      word = word.slice(limit);
+      limit = 96;
     }
     const candidate = current ? `${current} ${word}` : word;
-    if (candidate.length <= 96) current = candidate;
+    if (candidate.length <= limit) current = candidate;
     else {
       if (current) chunks.push(current);
       current = word;
@@ -376,13 +379,21 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       socket.send(JSON.stringify({ message_type: "FETCH_AUDIO_CHUNK", chunk_id: chunkId }));
     };
 
-  socket.addEventListener("open", () => {
+  let chunksSent = false;
+  const sendChunks = () => {
+    if (chunksSent || socket.readyState !== WebSocket.OPEN) return;
+    chunksSent = true;
     chunks.forEach((chunk, index) =>
       socket.send(
         JSON.stringify({ message_type: "INPUT_TEXT_CHUNK", text: chunk, ack_id: index + 1 }),
       ),
     );
-  });
+  };
+  socket.addEventListener("open", sendChunks, { once: true });
+  // A prewarmed socket is already OPEN, so its open event happened before this
+  // turn claimed it. Send immediately instead of waiting for an event that
+  // will never fire.
+  sendChunks();
   socket.addEventListener("message", (event) => {
     let message: {
       message_type?: string;
@@ -428,7 +439,7 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       } else {
         const status = message.processing_status ?? message.processing_staus ?? "PROCESSING";
         if (/error|failed/i.test(status)) fail("Sahara could not prepare that voice chunk.");
-        else window.setTimeout(() => fetchChunk(chunkId), 120);
+        else window.setTimeout(() => fetchChunk(chunkId), 80);
       }
     }
   });
