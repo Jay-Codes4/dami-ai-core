@@ -449,7 +449,7 @@ function BenchmarkPage() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {Object.entries(status.providers).map(([provider, ready]) => (
                   <div key={provider} className="border px-3 py-2">
-                    <span className="capitalize">{provider.replace("model3", "Meta MMS")}</span>
+                    <span className="capitalize">{provider === "model3" ? "Groq Whisper Large V3 Turbo" : provider}</span>
                     <span className={ready ? "ml-2 text-emerald-600" : "ml-2 text-amber-600"}>
                       {ready ? "configured" : "not configured"}
                     </span>
