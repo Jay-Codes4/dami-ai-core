@@ -280,7 +280,7 @@ function splitForSahara(text: string) {
   let current = "";
   for (const sourceWord of words) {
     let word = sourceWord;
-    let limit = chunks.length === 0 ? 32 : 96;
+    let limit = chunks.length === 0 ? 48 : 96;
     while (word.length > limit) {
       if (current) {
         chunks.push(current);
@@ -390,13 +390,20 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     socket.send(
       JSON.stringify({ message_type: "INPUT_TEXT_CHUNK", text: chunks[0], ack_id: 1 }),
     );
+    // Prime chunk 2 in the same Sahara session so there is no long silence
+    // after the opening phrase. Same session/voice parameters = same accent.
+    if (chunks[1]) {
+      socket.send(
+        JSON.stringify({ message_type: "INPUT_TEXT_CHUNK", text: chunks[1], ack_id: 2 }),
+      );
+    }
   };
   const sendRemainingChunks = () => {
     if (remainingChunksSent || socket.readyState !== WebSocket.OPEN) return;
     remainingChunksSent = true;
-    chunks.slice(1).forEach((chunk, index) =>
+    chunks.slice(2).forEach((chunk, index) =>
       socket.send(
-        JSON.stringify({ message_type: "INPUT_TEXT_CHUNK", text: chunk, ack_id: index + 2 }),
+        JSON.stringify({ message_type: "INPUT_TEXT_CHUNK", text: chunk, ack_id: index + 3 }),
       ),
     );
   };
