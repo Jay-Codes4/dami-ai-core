@@ -252,8 +252,16 @@ export function useVoiceSession() {
         voiceDiagnostic("TOTAL INTERACTION TIME", {
           textReadyMs: Math.round(performance.now() - interactionStartedRef.current),
         });
-        if (storage.getSettings().speakAnswers) void readAloud(result.answer);
-        else setStage("answered");
+        if (storage.getSettings().speakAnswers) {
+          // Speak a concise first response immediately. The full researched
+          // answer and citations remain on screen. This prevents a long legal
+          // answer from making the user wait for a huge TTS payload before
+          // hearing Dami acknowledge the completed result.
+          const firstSentence =
+            result.answer.match(/^.{1,420}?[.!?](?:\s|$)/s)?.[0]?.trim() ||
+            result.answer.slice(0, 320).trim();
+          void readAloud(firstSentence || result.answer);
+        } else setStage("answered");
       } catch (err) {
         if (cancelled.current) return;
         console.error(err);
