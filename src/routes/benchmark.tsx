@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, Loader2, Mic, Square, Upload } from "lucide-react";
+import { Download, Eye, EyeOff, Loader2, Mic, Square, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/benchmark")({
       { title: "Dami ASR Benchmark" },
       {
         name: "description",
-        content: "Controlled Sahara, Whisper and Meta MMS code-switching evaluation for Dami AI.",
+        content: "Controlled Sahara and two Groq Whisper code-switching baselines for Dami AI.",
       },
     ],
   }),
@@ -84,6 +84,7 @@ function BenchmarkPage() {
     [codeSwitchTokens, setCodeSwitchTokens] = useState(""),
     [criticalEntities, setCriticalEntities] = useState(""),
     [accessToken, setAccessToken] = useState(""),
+    [showAccessToken, setShowAccessToken] = useState(false),
     [audio, setAudio] = useState<{ blob: Blob; name: string; durationMs: number } | null>(null),
     [recording, setRecording] = useState(false),
     [running, setRunning] = useState(false),
@@ -434,14 +435,25 @@ function BenchmarkPage() {
             {status?.tokenRequired && (
               <label className="block text-sm font-medium">
                 Admin access token
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={accessToken}
-                  onChange={(event) => setAccessToken(event.target.value)}
-                  className="mt-1 h-11 w-full rounded-md border bg-background px-3 font-normal"
-                  placeholder="Kept in memory for this page only"
-                />
+                <div className="relative mt-1">
+                  <input
+                    type={showAccessToken ? "text" : "password"}
+                    autoComplete="off"
+                    value={accessToken}
+                    onChange={(event) => setAccessToken(event.target.value)}
+                    className="h-11 w-full rounded-md border bg-background px-3 pr-11 font-normal"
+                    placeholder="Kept in memory for this page only"
+                  />
+                  <button
+                    type="button"
+                    aria-label={showAccessToken ? "Hide admin access token" : "Show admin access token"}
+                    title={showAccessToken ? "Hide token" : "Show token"}
+                    onClick={() => setShowAccessToken((shown) => !shown)}
+                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground hover:text-foreground"
+                  >
+                    {showAccessToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </label>
             )}
 
@@ -449,7 +461,13 @@ function BenchmarkPage() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {Object.entries(status.providers).map(([provider, ready]) => (
                   <div key={provider} className="border px-3 py-2">
-                    <span className="capitalize">{provider === "model3" ? "Groq Whisper Large V3 Turbo" : provider}</span>
+                    <span className="capitalize">
+                      {provider === "whisper"
+                        ? "Groq Whisper Large V3"
+                        : provider === "model3"
+                          ? "Groq Whisper Large V3 Turbo"
+                          : provider}
+                    </span>
                     <span className={ready ? "ml-2 text-emerald-600" : "ml-2 text-amber-600"}>
                       {ready ? "configured" : "not configured"}
                     </span>

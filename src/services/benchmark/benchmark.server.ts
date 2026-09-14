@@ -12,7 +12,6 @@ import { BENCHMARK_LANGUAGE_CATEGORIES } from "@/lib/benchmark";
 import { research } from "@/services/agent/research.server";
 import { SAHARA_STT_SYNC_URL } from "@/services/sahara/sahara.server";
 
-const OPENAI_TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions";
 const GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 const Input = z.object({
@@ -35,17 +34,18 @@ const SAHARA_LANGUAGE: Record<BenchmarkLanguageCategory, "en" | "ig" | "pcm" | "
   "English + Igbo + Pidgin": "ig",
 };
 
-const MMS_ADAPTER: Record<BenchmarkLanguageCategory, "eng" | "ibo" | "pcm" | "yor"> = {
-  English: "eng",
-  Igbo: "ibo",
-  "Nigerian Pidgin": "pcm",
-  Yoruba: "yor",
-  "English + Igbo": "ibo",
-  "English + Yoruba": "yor",
-  "English + Pidgin": "pcm",
-  "Igbo + Pidgin": "ibo",
-  "English + Igbo + Pidgin": "ibo",
+const GROQ_LANGUAGE_HINT: Record<BenchmarkLanguageCategory, "en" | "ig" | "yo"> = {
+  English: "en",
+  Igbo: "ig",
+  "Nigerian Pidgin": "en",
+  Yoruba: "yo",
+  "English + Igbo": "en",
+  "English + Yoruba": "en",
+  "English + Pidgin": "en",
+  "Igbo + Pidgin": "ig",
+  "English + Igbo + Pidgin": "en",
 };
+
 
 type AudioInput = {
   bytes: Uint8Array;
@@ -82,7 +82,7 @@ export function benchmarkStatus() {
     tokenRequired: Boolean(configuredToken()) || process.env["NODE_ENV"] === "production",
     providers: {
       sahara: Boolean(process.env["INTRON_API_KEY"]),
-      whisper: Boolean(process.env["OPENAI_API_KEY"]),
+      whisper: Boolean(process.env["GROQ_API_KEY"]),
       model3: Boolean(process.env["GROQ_API_KEY"]),
       legalAgent: Boolean(process.env["GROQ_API_KEY"]),
     },
@@ -188,25 +188,27 @@ async function runSahara(input: AudioInput): Promise<BenchmarkAsrResult> {
 }
 
 async function runWhisper(input: AudioInput): Promise<BenchmarkAsrResult> {
-  const modelName = process.env["DAMI_BENCHMARK_WHISPER_MODEL"] ?? "whisper-1";
-  const model = `OpenAI ${modelName}`;
-  const configuration = "OpenAI transcription; automatic language detection; no translation";
-  const key = process.env["OPENAI_API_KEY"];
+  const modelName = process.env["DAMI_BENCHMARK_WHISPER_MODEL"] ?? "whisper-large-v3";
+  const model = `Groq ${modelName}`;
+  const language = GROQ_LANGUAGE_HINT[input.category];
+  const configuration = `Groq-hosted Whisper Large V3; language hint=${language}; transcription; no translation`;
+  const key = process.env["GROQ_API_KEY"];
   if (!key)
     return errorResult(
       "whisper",
       model,
       "not-configured",
       configuration,
-      "OPENAI_API_KEY is not configured.",
+      "GROQ_API_KEY is not configured.",
     );
   const form = new FormData();
   form.set("file", audioBlob(input), input.name);
   form.set("model", modelName);
   form.set("response_format", "json");
+  form.set("language", language);
   const started = performance.now();
   try {
-    const response = await fetch(OPENAI_TRANSCRIPTION_URL, {
+    const response = await fetch(GROQ_TRANSCRIPTION_URL, {
       method: "POST",
       signal: AbortSignal.timeout(150_000),
       headers: { Authorization: `Bearer ${key}` },
@@ -216,9 +218,10 @@ async function runWhisper(input: AudioInput): Promise<BenchmarkAsrResult> {
       text?: string;
       error?: { message?: string };
     };
-    if (!response.ok) throw new Error(payload.error?.message ?? `Whisper HTTP ${response.status}`);
-    const transcript = payload.text?.trim() ?? "";
-    if (!transcript) throw new Error("Whisper returned no transcript.");
+    if (!response.ok)
+      throw new Error(payload.error?.message ?? `Groq Whisper Large V3 HTTP ${response.status}`);
+    const transcript = (payload.text ?? "").trim();
+    if (!transcript) throw new Error("Groq Whisper Large V3 returned no transcript.");
     return {
       modelId: "whisper",
       model,
@@ -234,7 +237,7 @@ async function runWhisper(input: AudioInput): Promise<BenchmarkAsrResult> {
       model,
       "error",
       configuration,
-      error instanceof Error ? error.message : "Whisper transcription failed.",
+      error instanceof Error ? error.message : "Groq Whisper Large V3 transcription failed.",
     );
   }
 }
@@ -242,7 +245,8 @@ async function runWhisper(input: AudioInput): Promise<BenchmarkAsrResult> {
 async function runModel3(input: AudioInput): Promise<BenchmarkAsrResult> {
   const modelName = process.env["DAMI_BENCHMARK_MODEL3_NAME"] ?? "whisper-large-v3-turbo";
   const model = `Groq ${modelName}`;
-  const configuration = "Groq-hosted Whisper Large V3 Turbo; transcription; no translation";
+  const language = GROQ_LANGUAGE_HINT[input.category];
+  const configuration = `Groq-hosted Whisper Large V3 Turbo; language hint=${language}; transcription; no translation`;
   const key = process.env["GROQ_API_KEY"];
   if (!key)
     return errorResult(
@@ -256,6 +260,7 @@ async function runModel3(input: AudioInput): Promise<BenchmarkAsrResult> {
   form.set("file", audioBlob(input), input.name);
   form.set("model", modelName);
   form.set("response_format", "json");
+  form.set("language", language);
   const started = performance.now();
   try {
     const response = await fetch(GROQ_TRANSCRIPTION_URL, {
