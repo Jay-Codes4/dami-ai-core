@@ -253,14 +253,10 @@ export function useVoiceSession() {
           textReadyMs: Math.round(performance.now() - interactionStartedRef.current),
         });
         if (storage.getSettings().speakAnswers) {
-          // Speak a concise first response immediately. The full researched
-          // answer and citations remain on screen. This prevents a long legal
-          // answer from making the user wait for a huge TTS payload before
-          // hearing Dami acknowledge the completed result.
-          const firstSentence =
-            result.answer.match(/^.{1,420}?[.!?](?:\s|$)/s)?.[0]?.trim() ||
-            result.answer.slice(0, 320).trim();
-          void readAloud(firstSentence || result.answer);
+          // Start quickly, but never truncate Dami to one sentence. The TTS
+          // client already chunks long answers and begins playback as soon as
+          // the first Sahara audio chunk arrives, so pass the complete answer.
+          void readAloud(result.answer);
         } else setStage("answered");
       } catch (err) {
         if (cancelled.current) return;
