@@ -17,8 +17,8 @@ const VOICE_TTS_WS_URL = (
   (import.meta.env["VITE_DAMI_VOICE_WS_URL"] as string | undefined) ||
   "wss://dami-ai-core-1.onrender.com/stt"
 ).replace(/\/stt(?:\?.*)?$/, "/tts");
-const STREAM_START_TIMEOUT_MS = 2500;
-const HTTP_TTS_TIMEOUT_MS = 4500;
+const STREAM_START_TIMEOUT_MS = 6000;
+const HTTP_TTS_TIMEOUT_MS = 8000;
 let sharedAudio: HTMLAudioElement | null = null;
 
 type WarmTtsSocket = {
@@ -675,14 +675,13 @@ export async function speak(text: string, requested: VoiceOptions): Promise<Spee
   const sahara = await saharaSpeech(clean, o).catch(() => null);
   if (sahara) return sahara;
 
-  // Keep Dami's African female Sahara voice as the first fallback as well.
-  // This HTTP Generate path is slower than streaming but is much more robust on
-  // mobile networks and protects against provider websocket framing failures.
-  // Never let a synchronous Sahara fallback stall the interaction for tens of
-  // seconds/minutes. Give it a short final chance, then fall back immediately
-  // to the fastest available local/browser female voice.
+  // Preserve Dami's identity: if Sahara streaming misses the first-audio
+  // budget, make one bounded Sahara Generate attempt. Do not silently replace
+  // Dami with a generic OS/browser voice merely to appear faster.
   const generated = await saharaHttpSpeech(clean, o).catch(() => null);
   if (generated) return generated;
 
-  return nativeDesktopSpeech(clean) ?? browserSpeech(clean, o);
+  // A failed African-voice request should fail visibly/quietly rather than
+  // speaking in the wrong voice. The next interaction can retry Sahara.
+  return { stop() {} };
 }
