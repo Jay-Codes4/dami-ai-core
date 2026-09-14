@@ -59,10 +59,10 @@ The Sahara streaming gateway follows the documented session flow: connect, wait 
 
 **Judges / evaluators:** open the deployed [Dami Benchmark](https://dami-ai-core.vercel.app/benchmark) to inspect and run the reproducible ASR comparison. This evidence tool is intentionally isolated from the main Ask Dami demo so benchmark changes cannot alter the competition voice/legal workflow.
 
-The protected benchmark interface is available at `/benchmark` when `DAMI_BENCHMARK_ENABLED=true`. It can record or upload one consented sample and sends the exact same audio bytes independently and concurrently to:
+The protected benchmark interface is available at `/benchmark`. In production, execution is protected by `DAMI_BENCHMARK_ACCESS_TOKEN`; judges can inspect the methodology and published evidence without receiving provider API secrets. It can record or upload one consented sample and sends the exact same audio bytes independently and concurrently to:
 
 1. Intron Sahara v2.5 (primary competition ASR)
-2. OpenAI Whisper
+2. Groq Whisper Large V3
 3. Groq Whisper Large V3 Turbo
 
 Supported benchmark categories include English, Igbo, Nigerian Pidgin, Yoruba, English + Igbo, English + Pidgin, and English + Yoruba, with the existing experimental Igbo/Pidgin combinations clearly labelled. It automatically measures Unicode-aware WER, CER and provider latency. Testers enter explicit switched words/phrases and critical legal entities; Dami scores exact normalized preservation deterministically so every score is reviewable. Each successful transcript independently enters the same Dami legal agent, and the reviewer records intent, retrieval, grounding and citation PASS/FAIL signals. Results aggregate per language category and overall, then export as CSV or JSON.
@@ -71,13 +71,12 @@ The batch framework in [`benchmark/`](benchmark/) runs the same comparison offli
 
 Intron credits have been restored, so the Sahara execution path is ready. Actual benchmark rows remain empty until permitted test audio is added to `benchmark/manifest.csv` and the models are run; no result is estimated or fabricated.
 
-Run a Sahara smoke test with:
+Optional local/batch smoke-test examples:
 
 ```bash
 $env:INTRON_API_KEY="your-key"
 python benchmark/run_sahara.py --limit 3
 python benchmark/run_faster_whisper.py --model large-v3
-python benchmark/run_mms.py
 python benchmark/score.py benchmark/results.csv
 ```
 
@@ -96,11 +95,11 @@ Dami's submission approach covers privacy and consent, legal safety, source inte
 - [x] Hands-free “Hey Dami” desktop activation
 - [x] Code and technical documentation
 - [x] Protected browser benchmark route, automatic WER/CER, reviewable code-switch/entity scoring, downstream task checks, aggregates and exports
-- [x] Reproducible Sahara, Whisper and Groq Whisper Large V3 Turbo batch runners
+- [x] Reproducible Sahara, Groq Whisper Large V3 and Groq Whisper Large V3 Turbo batch runners
 - [x] Responsible AI note
 - [x] Sahara credits restored / benchmark runner ready
 - [ ] Add permitted code-switched benchmark audio + reference transcripts
-- [ ] Populate measured results for Sahara + Whisper + Groq Whisper Large V3 Turbo
+- [ ] Populate measured results for Sahara + Groq Whisper Large V3 + Groq Whisper Large V3 Turbo
 - [ ] Record final short prototype demo video
 
 ## Repository Map
