@@ -63,7 +63,7 @@ The protected benchmark interface is available at `/benchmark` when `DAMI_BENCHM
 
 1. Intron Sahara v2.5 (primary competition ASR)
 2. OpenAI Whisper
-3. Meta MMS 1B All
+3. Groq Whisper Large V3 Turbo
 
 Supported benchmark categories include English, Igbo, Nigerian Pidgin, Yoruba, English + Igbo, English + Pidgin, and English + Yoruba, with the existing experimental Igbo/Pidgin combinations clearly labelled. It automatically measures Unicode-aware WER, CER and provider latency. Testers enter explicit switched words/phrases and critical legal entities; Dami scores exact normalized preservation deterministically so every score is reviewable. Each successful transcript independently enters the same Dami legal agent, and the reviewer records intent, retrieval, grounding and citation PASS/FAIL signals. Results aggregate per language category and overall, then export as CSV or JSON.
 
@@ -96,11 +96,11 @@ Dami's submission approach covers privacy and consent, legal safety, source inte
 - [x] Hands-free “Hey Dami” desktop activation
 - [x] Code and technical documentation
 - [x] Protected browser benchmark route, automatic WER/CER, reviewable code-switch/entity scoring, downstream task checks, aggregates and exports
-- [x] Reproducible Sahara, Whisper and Meta MMS batch runners
+- [x] Reproducible Sahara, Whisper and Groq Whisper Large V3 Turbo batch runners
 - [x] Responsible AI note
 - [x] Sahara credits restored / benchmark runner ready
 - [ ] Add permitted code-switched benchmark audio + reference transcripts
-- [ ] Populate measured results for Sahara + Whisper + Meta MMS
+- [ ] Populate measured results for Sahara + Whisper + Groq Whisper Large V3 Turbo
 - [ ] Record final short prototype demo video
 
 ## Repository Map
