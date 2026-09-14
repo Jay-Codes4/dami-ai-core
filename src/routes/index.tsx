@@ -61,7 +61,7 @@ function Home() {
           <p className="mx-auto max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
             Speak naturally in English and supported African languages, including code-switching
             within the same sentence. Dami preserves your transcript, researches the law and returns
-            a sourced answer in her African female voice.
+            a clear, sourced answer you can review and use.
           </p>
         </div>
         <div className="grid w-full max-w-sm gap-2 sm:flex sm:max-w-none sm:w-auto sm:items-center sm:justify-center sm:gap-3">
@@ -109,7 +109,7 @@ function Home() {
           {
             icon: Mic,
             title: "Code-switch naturally",
-            body: "Use English, Igbo and Nigerian Pidgin in the same legal question without changing language mid-sentence.",
+            body: "Speak naturally in English and supported African languages, including code-switching within the same legal question.",
           },
           {
             icon: ScrollText,
