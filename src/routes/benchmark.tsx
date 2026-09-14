@@ -97,7 +97,7 @@ function BenchmarkPage() {
 
   useEffect(() => {
     setRecords(loadBenchmarkRecords());
-    void fetch("/api/benchmark/run", { cache: "no-store" })
+    void fetch("/benchmark/run", { cache: "no-store" })
       .then(async (response) => (response.ok ? ((await response.json()) as BenchmarkStatus) : null))
       .then((value) => setStatus(value))
       .catch(() => setStatus(null));
@@ -226,7 +226,7 @@ function BenchmarkPage() {
         body: form,
       };
       if (accessToken) request.headers = { Authorization: `Bearer ${accessToken}` };
-      const response = await fetch("/api/benchmark/run", request);
+      const response = await fetch("/benchmark/run", request);
       const payload = (await response.json().catch(() => ({}))) as BenchmarkRunResponse & {
         error?: string;
       };
