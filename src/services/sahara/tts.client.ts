@@ -621,16 +621,45 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     ended,
   };
 }
-async function saharaHttpSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle | null> {
+function splitForHttpSpeech(text: string) {
   const clean = cleanSpeechText(text);
-  if (!clean) return null;
+  if (!clean) return [];
+  const sentences = clean.match(/[^.!?]+[.!?]?/g)?.map((part) => part.trim()).filter(Boolean) ?? [clean];
+  const chunks: string[] = [];
+  let current = "";
+  for (const sentence of sentences) {
+    const candidate = current ? `${current} ${sentence}` : sentence;
+    if (candidate.length <= 320) current = candidate;
+    else {
+      if (current) chunks.push(current);
+      if (sentence.length <= 320) current = sentence;
+      else {
+        const words = sentence.split(/\s+/);
+        let piece = "";
+        for (const word of words) {
+          const next = piece ? `${piece} ${word}` : word;
+          if (next.length <= 320) piece = next;
+          else {
+            if (piece) chunks.push(piece);
+            piece = word;
+          }
+        }
+        current = piece;
+      }
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+async function fetchSaharaHttpChunk(text: string, o: VoiceOptions): Promise<Blob | null> {
   try {
     const response = await fetch("/voice/tts", {
       method: "POST",
       signal: AbortSignal.timeout(HTTP_TTS_TIMEOUT_MS),
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: clean,
+        text,
         accent: o.accent,
         gender: "female",
         language: o.language,
@@ -638,99 +667,129 @@ async function saharaHttpSpeech(text: string, o: VoiceOptions): Promise<SpeechHa
     });
     if (!response.ok) return null;
     const blob = await response.blob();
-    if (!blob.size) return null;
-
-    const audio = getSharedAudio() ?? new Audio();
-    const objectUrl = URL.createObjectURL(blob);
-    let stopped = false,
-      paused = false,
-      settled = false,
-      startedDone = false;
-    let resolveStarted!: () => void, resolveEnded!: () => void;
-    const started = new Promise<void>((resolve) => (resolveStarted = resolve)),
-      ended = new Promise<void>((resolve) => (resolveEnded = resolve)),
-      markStarted = () => {
-        if (!startedDone) {
-          startedDone = true;
-          resolveStarted();
-        }
-      },
-      finish = () => {
-        markStarted();
-        if (!settled) {
-          settled = true;
-          resolveEnded();
-        }
-      };
-
-    audio.pause();
-    audio.src = objectUrl;
-    audio.preload = "auto";
-    audio.playbackRate = 1.04;
-    audio.addEventListener("play", markStarted, { once: true });
-    audio.addEventListener("ended", finish, { once: true });
-    audio.addEventListener("error", finish, { once: true });
-
-    try {
-      await audio.play();
-    } catch {
-      audio.removeAttribute("src");
-      audio.load();
-      URL.revokeObjectURL(objectUrl);
-      return null;
-    }
-
-    void ended.finally(() => {
-      if (!stopped) {
-        audio.removeAttribute("src");
-        audio.load();
-      }
-      URL.revokeObjectURL(objectUrl);
-    });
-
-    return {
-      stop() {
-        stopped = true;
-        audio.pause();
-        audio.removeAttribute("src");
-        audio.load();
-        finish();
-      },
-      pause() {
-        if (!settled && !paused) {
-          audio.pause();
-          paused = true;
-        }
-      },
-      resume() {
-        if (!settled && paused) {
-          paused = false;
-          void audio.play();
-        }
-      },
-      isPaused: () => paused,
-      started,
-      ended,
-    };
+    return blob.size ? blob : null;
   } catch {
     return null;
   }
 }
 
+async function saharaHttpSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle | null> {
+  const chunks = splitForHttpSpeech(text);
+  if (!chunks.length) return null;
+
+  // Root reliability path: each answer turn gets fresh bounded Sahara Generate
+  // requests instead of depending on a long-lived websocket that can become
+  // invalid between recordings. Only the first short chunk blocks startup.
+  const firstBlob = await fetchSaharaHttpChunk(chunks[0]!, o);
+  if (!firstBlob) return null;
+
+  const audio = getSharedAudio() ?? new Audio();
+  let stopped = false,
+    paused = false,
+    settled = false,
+    startedDone = false,
+    currentUrl: string | null = null;
+  let resolveStarted!: () => void, resolveEnded!: () => void;
+  const started = new Promise<void>((resolve) => (resolveStarted = resolve)),
+    ended = new Promise<void>((resolve) => (resolveEnded = resolve)),
+    markStarted = () => {
+      if (!startedDone) {
+        startedDone = true;
+        resolveStarted();
+      }
+    },
+    finish = () => {
+      markStarted();
+      if (!settled) {
+        settled = true;
+        resolveEnded();
+      }
+    },
+    playBlob = async (blob: Blob) => {
+      if (stopped) return;
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      currentUrl = URL.createObjectURL(blob);
+      audio.pause();
+      audio.src = currentUrl;
+      audio.preload = "auto";
+      audio.playbackRate = 1.04;
+      await audio.play();
+      markStarted();
+      await new Promise<void>((resolve, reject) => {
+        audio.addEventListener("ended", () => resolve(), { once: true });
+        audio.addEventListener("error", () => reject(new Error("Voice playback failed.")), {
+          once: true,
+        });
+      });
+    };
+
+  void (async () => {
+    try {
+      let nextPromise: Promise<Blob | null> | null =
+        chunks[1] ? fetchSaharaHttpChunk(chunks[1], o) : null;
+      await playBlob(firstBlob);
+
+      for (let index = 1; index < chunks.length && !stopped; index++) {
+        const blob = await nextPromise;
+        if (!blob) throw new Error("Sahara voice chunk failed.");
+        nextPromise =
+          chunks[index + 1] ? fetchSaharaHttpChunk(chunks[index + 1]!, o) : null;
+        await playBlob(blob);
+      }
+    } catch {
+      // Keep the written answer intact; never switch accents/voices mid-answer.
+    } finally {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      currentUrl = null;
+      finish();
+    }
+  })();
+
+  return {
+    stop() {
+      stopped = true;
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      currentUrl = null;
+      finish();
+    },
+    pause() {
+      if (!settled && !paused) {
+        paused = true;
+        audio.pause();
+      }
+    },
+    resume() {
+      if (!settled && paused) {
+        paused = false;
+        void audio.play();
+      }
+    },
+    isPaused: () => paused,
+    started,
+    ended,
+  };
+}
+
 export async function speak(text: string, requested: VoiceOptions): Promise<SpeechHandle> {
   const clean = cleanSpeechText(text),
     o = normaliseVoice(requested);
-  const sahara = await saharaSpeech(clean, o).catch(() => null);
-  if (sahara) return sahara;
 
-  // Preserve Dami's identity: if Sahara streaming misses the first-audio
-  // budget, make one bounded Sahara Generate attempt. Do not silently replace
-  // Dami with a generic OS/browser voice merely to appear faster.
+  // Use fresh bounded Sahara Generate requests as the primary playback path.
+  // This avoids the intermittent upstream websocket framing failure observed
+  // after the first recording while keeping the same Sahara African voice.
   const generated = await saharaHttpSpeech(clean, o).catch(() => null);
   if (generated) return generated;
 
-  // Do not return a fake "successful" silent handle. Surface the failure so
-  // the UI can keep the written answer and offer Read Aloud/retry cleanly.
+  // Keep streaming as a secondary resilience path only.
+  const sahara = await saharaSpeech(clean, o).catch(() => null);
+  if (sahara) return sahara;
+
   throw new Error(
     "Dami's voice session could not start. The written answer is ready; tap Read Aloud to retry.",
   );
