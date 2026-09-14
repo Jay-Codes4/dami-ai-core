@@ -1,20 +1,20 @@
-export type DamiLanguageCode = "en" | "ig" | "pcm";
+export type DamiLanguageCode = "en" | "ak" | "yo" | "sw" | "ig" | "pcm";
 
 export interface DamiLanguage {
   code: DamiLanguageCode;
   label: string;
   shortLabel: string;
   codeSwitched: boolean;
-  saharaSttLanguage: "en" | "ig" | "pcm";
+  saharaSttLanguage: "en" | "ak" | "yo" | "sw" | "ig" | "pcm";
   expectedLanguages: readonly string[];
-  ttsLanguage: "en" | "ig" | "pcm";
-  preferredAccent: "yoruba" | "igbo" | "pidgin";
+  ttsLanguage: "en" | "yo" | "sw" | "ig" | "pcm";
+  preferredAccent: "yoruba" | "swahili" | "igbo" | "pidgin";
 }
 
 /**
- * Competition language scope. Sahara publishes `en` for English, `ig` for
- * Igbo-English code-switching, and `pcm` for Pidgin-English code-switching.
- * Sahara does not document a generic AUTO code, so Dami does not invent one.
+ * Keep Dami's original launch languages and add Igbo for the competition.
+ * The visible selector must not be narrowed just because the benchmark focuses
+ * on English, Igbo and Nigerian Pidgin.
  */
 export const DAMI_LANGUAGES: DamiLanguage[] = [
   {
@@ -28,9 +28,41 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
     preferredAccent: "yoruba",
   },
   {
+    code: "ak",
+    label: "Akan ↔ English",
+    shortLabel: "Akan-English",
+    codeSwitched: true,
+    saharaSttLanguage: "ak",
+    expectedLanguages: ["Akan", "English"],
+    // Sahara TTS does not expose Akan output here, so keep the proven
+    // West African English voice fallback while preserving Akan STT.
+    ttsLanguage: "en",
+    preferredAccent: "yoruba",
+  },
+  {
+    code: "yo",
+    label: "Yoruba ↔ English",
+    shortLabel: "Yoruba-English",
+    codeSwitched: true,
+    saharaSttLanguage: "yo",
+    expectedLanguages: ["Yoruba", "English"],
+    ttsLanguage: "yo",
+    preferredAccent: "yoruba",
+  },
+  {
+    code: "sw",
+    label: "Swahili ↔ English",
+    shortLabel: "Swahili-English",
+    codeSwitched: true,
+    saharaSttLanguage: "sw",
+    expectedLanguages: ["Swahili", "English"],
+    ttsLanguage: "sw",
+    preferredAccent: "swahili",
+  },
+  {
     code: "ig",
-    label: "Igbo",
-    shortLabel: "Igbo + English",
+    label: "Igbo ↔ English",
+    shortLabel: "Igbo-English",
     codeSwitched: true,
     saharaSttLanguage: "ig",
     expectedLanguages: ["Igbo", "English"],
@@ -39,8 +71,8 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
   },
   {
     code: "pcm",
-    label: "Nigerian Pidgin",
-    shortLabel: "Pidgin + English",
+    label: "Nigerian Pidgin ↔ English",
+    shortLabel: "Pidgin-English",
     codeSwitched: true,
     saharaSttLanguage: "pcm",
     expectedLanguages: ["Nigerian Pidgin", "English"],
@@ -52,7 +84,14 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
 export const DEFAULT_DAMI_LANGUAGE: DamiLanguageCode = "en";
 
 export function isDamiLanguageCode(value: unknown): value is DamiLanguageCode {
-  return value === "en" || value === "ig" || value === "pcm";
+  return (
+    value === "en" ||
+    value === "ak" ||
+    value === "yo" ||
+    value === "sw" ||
+    value === "ig" ||
+    value === "pcm"
+  );
 }
 
 export function getDamiLanguage(code: string): DamiLanguage {
