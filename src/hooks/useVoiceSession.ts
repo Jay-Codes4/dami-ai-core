@@ -11,6 +11,7 @@ import {
   speak,
   startRecording,
   transcribeSamples,
+  warmSaharaVoice,
   warmVoiceGateway,
   type Recorder,
   type SpeechHandle,
@@ -206,6 +207,18 @@ export function useVoiceSession() {
       setError(null);
       setAnswer(null);
       setStage("researching");
+
+      // Open and authenticate Sahara TTS while legal research is running.
+      // By the time the answer returns, Dami can send text over an already-ready
+      // voice session instead of paying websocket + Sahara session startup latency.
+      if (settings.speakAnswers) {
+        void warmSaharaVoice({
+          accent: settings.voiceAccent || language.preferredAccent,
+          gender: settings.voiceGender,
+          language: language.ttsLanguage,
+        });
+      }
+
       voiceDiagnostic("LEGAL INTENT", {
         originalCharacters: activeTranscript.originalTranscript.length,
         retrievalCharacters: activeTranscript.normalizedRetrievalQuery.length,
