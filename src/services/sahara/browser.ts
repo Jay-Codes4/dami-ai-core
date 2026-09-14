@@ -36,6 +36,13 @@ export const prepareAudioPlayback = createClientOnlyFn(async (): Promise<void> =
   await mod.prepareAudioPlayback();
 });
 
+export const warmSaharaVoice = createClientOnlyFn(
+  async (options: { accent: string; gender: string; language: string }): Promise<void> => {
+    const mod = await import("./tts.client");
+    await mod.warmSaharaVoice(options);
+  },
+);
+
 export const warmVoiceGateway = createClientOnlyFn(async (): Promise<void> => {
   const mod = await import("./stt.client");
   await mod.warmVoiceGateway();

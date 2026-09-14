@@ -20,6 +20,95 @@ const VOICE_TTS_WS_URL = (
 const STREAM_START_TIMEOUT_MS = 4500;
 let sharedAudio: HTMLAudioElement | null = null;
 
+type WarmTtsSocket = {
+  key: string;
+  socket: WebSocket;
+  ready: Promise<void>;
+  createdAt: number;
+  claimed: boolean;
+};
+let warmTtsSocket: WarmTtsSocket | null = null;
+
+function ttsSocketKey(o: VoiceOptions) {
+  const n = normaliseVoice(o);
+  return `${n.language}|${n.accent}|female`;
+}
+
+function buildTtsUrl(o: VoiceOptions) {
+  const n = normaliseVoice(o);
+  const url = new URL(VOICE_TTS_WS_URL);
+  url.searchParams.set("voice_accent", n.accent);
+  url.searchParams.set("voice_gender", "female");
+  url.searchParams.set("voice_language", n.language);
+  url.searchParams.set("output_audio_format", "wav");
+  return url;
+}
+
+export function warmSaharaVoice(requested: VoiceOptions) {
+  if (typeof window === "undefined" || typeof WebSocket === "undefined") return Promise.resolve();
+  const o = normaliseVoice(requested),
+    key = ttsSocketKey(o),
+    now = Date.now();
+
+  if (
+    warmTtsSocket &&
+    warmTtsSocket.key === key &&
+    !warmTtsSocket.claimed &&
+    warmTtsSocket.socket.readyState === WebSocket.OPEN &&
+    now - warmTtsSocket.createdAt < 30_000
+  )
+    return warmTtsSocket.ready;
+
+  try {
+    warmTtsSocket?.socket.close();
+  } catch {}
+  warmTtsSocket = null;
+
+  const socket = new WebSocket(buildTtsUrl(o));
+  let resolveReady!: () => void;
+  const ready = new Promise<void>((resolve) => (resolveReady = resolve));
+  const warm: WarmTtsSocket = { key, socket, ready, createdAt: now, claimed: false };
+  warmTtsSocket = warm;
+
+  const finishReady = () => resolveReady();
+  const timer = window.setTimeout(finishReady, 4500);
+  socket.addEventListener("message", (event) => {
+    try {
+      const message = JSON.parse(String(event.data)) as { message_type?: string };
+      if (message.message_type === "SESSION_CREATED") {
+        window.clearTimeout(timer);
+        finishReady();
+      }
+    } catch {}
+  });
+  socket.addEventListener("error", () => {
+    window.clearTimeout(timer);
+    finishReady();
+  }, { once: true });
+  socket.addEventListener("close", () => {
+    window.clearTimeout(timer);
+    finishReady();
+    if (warmTtsSocket === warm && !warm.claimed) warmTtsSocket = null;
+  }, { once: true });
+  return ready;
+}
+
+function takeWarmTtsSocket(o: VoiceOptions) {
+  const warm = warmTtsSocket,
+    key = ttsSocketKey(o);
+  if (
+    !warm ||
+    warm.key !== key ||
+    warm.claimed ||
+    warm.socket.readyState !== WebSocket.OPEN ||
+    Date.now() - warm.createdAt >= 30_000
+  )
+    return null;
+  warm.claimed = true;
+  if (warmTtsSocket === warm) warmTtsSocket = null;
+  return warm.socket;
+}
+
 function getSharedAudio() {
   if (typeof window === "undefined") return null;
   if (!sharedAudio) {
@@ -227,11 +316,7 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     chunks = splitForSahara(clean);
   if (!chunks.length || typeof WebSocket === "undefined") return null;
 
-  const url = new URL(VOICE_TTS_WS_URL);
-  url.searchParams.set("voice_accent", o.accent);
-  url.searchParams.set("voice_gender", "female");
-  url.searchParams.set("voice_language", o.language);
-  url.searchParams.set("output_audio_format", "wav");
+  const url = buildTtsUrl(o);
 
   type Deferred = {
     promise: Promise<Blob>;
@@ -251,7 +336,7 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
   // Later chunks may reject before playback reaches them. Attach a handler now
   // so a gateway failure never becomes an unhandled browser rejection.
   for (const deferred of deferreds) void deferred.promise.catch(() => undefined);
-  const socket = new WebSocket(url),
+  const socket = takeWarmTtsSocket(o) ?? new WebSocket(url),
     terminalTypes = new Set([
       "AUTHENTICATION_ERROR",
       "RESOURCE_EXHAUSTED",
