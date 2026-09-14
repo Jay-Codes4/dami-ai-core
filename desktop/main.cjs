@@ -8,6 +8,8 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 const WINDOW_WIDTH = 236,
   WINDOW_HEIGHT = 238,
+  RESULT_WIDTH = 620,
+  RESULT_HEIGHT = 760,
   EDGE_GAP = 14;
 const DEFAULT_WEB_URL = "https://dami-ai-core.vercel.app";
 let win = null,
@@ -20,6 +22,7 @@ let win = null,
   isQuitting = false,
   isDesktopForeground = true,
   isVoiceTurnActive = false,
+  isResultPanelOpen = false,
   rendererVoiceReady = false,
   pendingActivation = null,
   activationSequence = 0;
@@ -67,16 +70,24 @@ function writeSettings(s) {
 function dockWindow(position) {
   if (!win) return;
   const d = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()),
-    { x, y, width, height } = d.workArea;
+    { x, y, width: workWidth, height: workHeight } = d.workArea,
+    width = Math.min(isResultPanelOpen ? RESULT_WIDTH : WINDOW_WIDTH, workWidth - EDGE_GAP * 2),
+    height = Math.min(isResultPanelOpen ? RESULT_HEIGHT : WINDOW_HEIGHT, workHeight - EDGE_GAP * 2);
   win.setBounds(
     {
-      x: x + width - WINDOW_WIDTH - EDGE_GAP,
-      y: position === "top" ? y + EDGE_GAP : y + height - WINDOW_HEIGHT - EDGE_GAP,
-      width: WINDOW_WIDTH,
-      height: WINDOW_HEIGHT,
+      x: x + workWidth - width - EDGE_GAP,
+      y: position === "top" ? y + EDGE_GAP : y + workHeight - height - EDGE_GAP,
+      width,
+      height,
     },
     true,
   );
+}
+function setResultPanelOpen(value) {
+  isResultPanelOpen = Boolean(value);
+  if (!win || win.isDestroyed()) return;
+  dockWindow(readSettings().dock);
+  logDesktop("result-panel", { open: isResultPanelOpen });
 }
 function syncLoginItem(s) {
   if (process.platform === "win32" || process.platform === "darwin")
@@ -135,6 +146,7 @@ function stopWakeListener() {
   wakeProcess = null;
 }
 function beginVoiceTurn(source = "renderer") {
+  setResultPanelOpen(false);
   if (isVoiceTurnActive) {
     logDesktop("voice-turn-already-active", { source, wakeStatus });
     return;
@@ -573,8 +585,8 @@ function createWindow() {
     height: WINDOW_HEIGHT,
     minWidth: WINDOW_WIDTH,
     minHeight: WINDOW_HEIGHT,
-    maxWidth: WINDOW_WIDTH,
-    maxHeight: WINDOW_HEIGHT,
+    maxWidth: RESULT_WIDTH,
+    maxHeight: RESULT_HEIGHT,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -598,6 +610,7 @@ function createWindow() {
   void win.loadURL(`${base.replace(/\/$/, "")}/companion?desktop=1`);
   win.webContents.on("did-start-loading", () => {
     rendererVoiceReady = false;
+    setResultPanelOpen(false);
   });
   win.webContents.on("did-finish-load", () => {
     logDesktop("renderer-loaded", { url: win?.webContents.getURL() });
@@ -696,6 +709,10 @@ if (hasSingleInstanceLock)
     ipcMain.handle("dami:voice-stage", (_event, stage, error) => {
       logDesktop("renderer-stage", { stage: String(stage || ""), error: String(error || "") });
       return true;
+    });
+    ipcMain.handle("dami:set-result-panel-open", (_event, value) => {
+      setResultPanelOpen(Boolean(value));
+      return isResultPanelOpen;
     });
     ipcMain.handle("dami:end-voice-turn", () => {
       endVoiceTurn();

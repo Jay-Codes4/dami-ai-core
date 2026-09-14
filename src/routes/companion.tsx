@@ -1,13 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { DamiAvatar } from "@/components/DamiAvatar";
 import { useVoiceSession } from "@/hooks/useVoiceSession";
 import { storage } from "@/lib/storage";
-import { playListeningEndCue } from "@/services/voice/listeningCue";
+import { voiceDiagnostic } from "@/lib/voiceDiagnostics";
+import { playListeningCue, playListeningEndCue } from "@/services/voice/listeningCue";
+
+const DesktopAnswerPanel = lazy(async () => {
+  const module = await import("@/components/AnswerPanel");
+  return { default: module.AnswerPanel };
+});
 
 export const Route = createFileRoute("/companion")({
   validateSearch: (search: Record<string, unknown>) => ({
-    desktop: search.desktop === "1" || search.desktop === 1 ? 1 : undefined,
+    desktop: search["desktop"] === "1" || search["desktop"] === 1 ? 1 : undefined,
   }),
   component: Companion,
 });
@@ -45,12 +52,14 @@ type DesktopBridge = {
   beginVoiceTurn?: (activationId?: string) => Promise<boolean>;
   endVoiceTurn?: () => Promise<boolean>;
   reportVoiceStage?: (stage: string, error?: string) => Promise<boolean>;
+  setResultPanelOpen?: (open: boolean) => Promise<boolean>;
 };
 
 function desktopAction(stage: ReturnType<typeof useVoiceSession>["stage"], wake: WakeStatus) {
   if (stage === "requesting-permission" || stage === "listening") return "Dami is listening…";
   if (stage === "transcribing") return "Dami is transcribing…";
   if (stage === "researching") return "Dami is researching…";
+  if (stage === "thinking") return "Dami is preparing your answer…";
   if (stage === "speaking") return "Dami is speaking…";
   if (stage === "answered") return "Done · click me again";
   if (stage === "error") return "Try again · click me";
@@ -65,11 +74,16 @@ function Companion() {
     startListening,
     stopSpeaking,
     askWakeCapture,
-    ask,
     robotState,
     level,
     stage,
     statusText,
+    answer,
+    question,
+    session,
+    speechPaused,
+    readAloud,
+    toggleSpeechPause,
   } = useVoiceSession();
   const recognitionRef = useRef<Recognition | null>(null),
     stageRef = useRef(stage),
@@ -77,7 +91,13 @@ function Companion() {
     desktopTurnRef = useRef(false);
   const [wakeAvailable, setWakeAvailable] = useState(true),
     [wakeActive, setWakeActive] = useState(false),
-    [nativeWakeStatus, setNativeWakeStatus] = useState<WakeStatus>("starting");
+    [nativeWakeStatus, setNativeWakeStatus] = useState<WakeStatus>("starting"),
+    [resultPanelOpen, setResultPanelOpen] = useState(false);
+  const changeResultPanel = useCallback((open: boolean) => {
+    setResultPanelOpen(open);
+    const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
+    void bridge?.setResultPanelOpen?.(open);
+  }, []);
   useEffect(() => {
     stageRef.current = stage;
     const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
@@ -114,6 +134,9 @@ function Companion() {
       if (stageRef.current === "speaking") stopSpeaking();
       else if (!["welcome", "idle", "answered", "error"].includes(stageRef.current)) return;
       activatingRef.current = true;
+      changeResultPanel(false);
+      if (wake?.source === "wake-word")
+        voiceDiagnostic("WAKE WORD DETECTED", { hasCommand: Boolean(wake.command?.trim()) });
       recognitionRef.current?.stop();
       const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
       try {
@@ -123,9 +146,9 @@ function Companion() {
         }
         const command = wake?.command?.trim() || "";
         if (command) {
-          void playListeningEndCue();
-          if (wake?.audioBase64) await askWakeCapture(wake.audioBase64, command);
-          else await ask(command);
+          void playListeningCue();
+          window.setTimeout(() => void playListeningEndCue(), 260);
+          await askWakeCapture(wake?.audioBase64 ?? "", command);
           return;
         }
         // Open the microphone immediately. The rising cue and visible listening
@@ -136,8 +159,12 @@ function Companion() {
         activatingRef.current = false;
       }
     },
-    [ask, askWakeCapture, startListening, stopSpeaking],
+    [askWakeCapture, changeResultPanel, startListening, stopSpeaking],
   );
+  useEffect(() => {
+    const bridge = (window as typeof window & { damiDesktop?: DesktopBridge }).damiDesktop;
+    if (bridge?.isDesktop && answer) changeResultPanel(true);
+  }, [answer, changeResultPanel]);
   useEffect(() => {
     if (!desktopTurnRef.current || !["idle", "answered", "error"].includes(stage)) return;
     desktopTurnRef.current = false;
@@ -165,9 +192,10 @@ function Companion() {
         .getWakeStatus()
         .then((s) => {
           if (cancelled) return;
-          setNativeWakeStatus(s);
-          setWakeActive(s === "ready");
-          setWakeAvailable(!["error", "unsupported", "stopped"].includes(s));
+          const status = s as WakeStatus;
+          setNativeWakeStatus(status);
+          setWakeActive(status === "ready");
+          setWakeAvailable(!["error", "unsupported", "stopped"].includes(status));
         })
         .catch(() => {
           if (!cancelled) {
@@ -270,8 +298,53 @@ function Companion() {
     "listening",
     "transcribing",
     "researching",
+    "thinking",
     "speaking",
   ].includes(stage);
+  if (isDesktop && answer && resultPanelOpen)
+    return (
+      <main className="flex h-screen w-screen flex-col overflow-hidden border border-border bg-background p-3 text-foreground shadow-2xl">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border pb-3">
+          <button
+            type="button"
+            onPointerDown={() => void activate()}
+            className="flex min-w-0 items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label="Ask Dami another question"
+          >
+            <DamiAvatar state={robotState} level={level} size={62} className="shrink-0" />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold">Dami's complete result</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                Click Dami to ask again · {desktopStatus}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => changeResultPanel(false)}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-border hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label="Close result panel"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto py-3 pr-1">
+          <Suspense
+            fallback={<p className="p-4 text-sm text-muted-foreground">Opening full result…</p>}
+          >
+            <DesktopAnswerPanel
+              question={question}
+              answer={answer}
+              session={session}
+              speaking={stage === "speaking"}
+              paused={speechPaused}
+              onReadAloud={() => void readAloud(answer.answer)}
+              onToggleSpeech={toggleSpeechPause}
+            />
+          </Suspense>
+        </div>
+      </main>
+    );
   if (isDesktop)
     return (
       <main className="flex h-screen w-screen select-none items-center justify-center overflow-hidden bg-transparent p-0">

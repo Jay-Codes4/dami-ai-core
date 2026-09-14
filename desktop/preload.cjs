@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("damiDesktop", {
   beginVoiceTurn: (activationId) => ipcRenderer.invoke("dami:begin-voice-turn", activationId),
   endVoiceTurn: () => ipcRenderer.invoke("dami:end-voice-turn"),
   reportVoiceStage: (stage, error) => ipcRenderer.invoke("dami:voice-stage", stage, error),
+  setResultPanelOpen: (open) => ipcRenderer.invoke("dami:set-result-panel-open", open),
   localTranscribe: () => ipcRenderer.invoke("dami:local-transcribe"),
   localSpeak: (text) => ipcRenderer.invoke("dami:local-speak", text),
   stopLocalSpeech: () => ipcRenderer.invoke("dami:stop-local-speech"),

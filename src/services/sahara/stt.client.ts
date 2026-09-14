@@ -28,10 +28,12 @@ export interface TranscriptionResult {
   text: string;
   durationMs: number;
   requestId: string | null;
+  engine: "sahara-stt" | "windows-speech";
+  language: string;
 }
 
 const VOICE_WS_URL =
-  (import.meta.env.VITE_DAMI_VOICE_WS_URL as string | undefined) ||
+  (import.meta.env["VITE_DAMI_VOICE_WS_URL"] as string | undefined) ||
   "wss://dami-ai-core-1.onrender.com/stt";
 const VOICE_HEALTH_URL = VOICE_WS_URL.replace(/^wss:/, "https:")
   .replace(/^ws:/, "http:")
@@ -311,7 +313,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     const final = socketReady
       ? await Promise.race([
           finalPromise,
-          new Promise<string>((resolve) => setTimeout(() => resolve(committedTranscript), 700)),
+          new Promise<string>((resolve) => setTimeout(() => resolve(committedTranscript), 1400)),
         ])
       : "";
     try {
@@ -408,6 +410,8 @@ async function saharaFinal(
     durationMs?: number;
     requestId?: string | null;
     error?: string;
+    engine?: "sahara-stt";
+    language?: string;
   } | null = null;
   try {
     payload = raw ? JSON.parse(raw) : null;
@@ -419,6 +423,8 @@ async function saharaFinal(
       text: payload.text.trim(),
       durationMs: payload.durationMs ?? 0,
       requestId: payload.requestId ?? null,
+      engine: "sahara-stt" as const,
+      language: payload.language ?? options.language,
     };
   throw new Error(
     payload?.error?.trim() ||
@@ -431,18 +437,30 @@ export async function transcribeSamples(
   options: { language: string; codeSwitching: boolean; browserTranscript?: string },
 ): Promise<TranscriptionResult> {
   if (capture.streamed && capture.transcript?.trim())
-    return { text: capture.transcript.trim(), durationMs: capture.durationMs, requestId: null };
-  // Sahara has already processed this text through the live stream. After the
-  // short commit window, prefer its stable partial over uploading the same turn.
-  const livePartial = capture.partialTranscript?.trim();
-  if (livePartial) return { text: livePartial, durationMs: capture.durationMs, requestId: null };
+    return {
+      text: capture.transcript.trim(),
+      durationMs: capture.durationMs,
+      requestId: null,
+      engine: "sahara-stt",
+      language: options.language,
+    };
+  // A partial hypothesis is useful only for immediate UI feedback. It can omit
+  // the end of a code-switched question, so the legal query must use a committed
+  // live transcript or the completed file-transcription request.
   try {
     return await saharaFinal(capture, options);
   } catch (error) {
     // Native Windows recognition is a last-resort resilience path for wake
     // commands. Sahara is still attempted first, but Dami never strands a turn.
-    const fallback = options.browserTranscript?.trim().slice(0, 1200).trim();
-    if (fallback) return { text: fallback, durationMs: capture.durationMs, requestId: null };
+    const fallback = options.browserTranscript?.trim();
+    if (fallback)
+      return {
+        text: fallback,
+        durationMs: capture.durationMs,
+        requestId: null,
+        engine: "windows-speech",
+        language: options.language,
+      };
     throw error;
   }
 }

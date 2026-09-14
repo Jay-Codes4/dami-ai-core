@@ -186,7 +186,7 @@ async function researchWithGroqOnly(question: string, groqKey: string): Promise<
     answer,
     keyFindings: [],
     citations: [],
-    insufficientEvidence: false,
+    insufficientEvidence: true,
     limitations:
       "Live web search was unavailable for this request. Current authorities should be verified against an official legal source before professional reliance.",
   };

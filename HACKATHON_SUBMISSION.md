@@ -1,19 +1,23 @@
 # Dami AI — Hackathon Submission Pack
 
 ## One-line pitch
+
 Dami AI is a voice-first African legal research companion that turns naturally spoken and code-switched legal questions into jurisdiction-aware research, source-grounded reasoning, citations, and spoken answers.
 
 ## Problem
+
 Legal information is difficult to search and understand when users naturally speak rather than type, use African accents, or code-switch between English and African languages. Speech errors become especially costly around names, legal terms, statutes and procedural language.
 
 ## Solution
+
 Dami makes speech the start of an agentic legal workflow rather than the final output:
 
 Voice → speech recognition → jurisdiction-aware legal research → source retrieval → legal reasoning → citations → spoken answer
 
-The web prototype uses Sahara for the challenge speech path. The Windows companion adds hands-free "Hey Dami" activation and can keep working while its avatar is hidden behind active programs. When Sahara TTS is unavailable, desktop Dami prefers an installed local YarnGPT Nigerian female voice, with Windows speech as a final fallback.
+The web prototype uses Sahara as the primary challenge speech path for English, Igbo and Nigerian Pidgin, preserves the original mixed-language transcript, and keeps normalization separate for retrieval. The Windows companion adds hands-free "Hey Dami" activation plus intentional click/double-click activation. Dami enforces a female Sahara voice and preserves the complete written answer if no female audio fallback is available.
 
 ## Demo video script (2–3 minutes)
+
 0:00–0:20 — Problem: explain that African users speak naturally and code-switch while legal search often expects clean typed English.
 
 0:20–0:35 — Product: introduce Dami and explain that voice triggers research, reasoning, citations and a spoken answer.
@@ -29,6 +33,7 @@ The web prototype uses Sahara for the challenge speech path. The Windows compani
 2:35–2:50 — Close: "Dami AI — a voice for justice."
 
 ## Submission fields
+
 Track: Legal & Public Services
 
 Prototype: https://dami-ai-core.vercel.app
@@ -39,14 +44,15 @@ Technical summary: React + TypeScript + TanStack Start; Electron desktop compani
 
 Responsible AI: see RESPONSIBLE_AI.md.
 
-Benchmark: see benchmark/. Sahara credits are restored and the batch runner is ready. Results remain empty until real model outputs are measured on permitted audio.
+Benchmark: open the protected `/benchmark` route or use `benchmark/`. The same audio is evaluated independently by Sahara, Whisper and Meta MMS, with automatic WER/CER/latency, deterministic code-switch/entity checks, downstream legal-agent review, per-category aggregates and CSV/JSON export. Results remain empty until real model outputs are measured on permitted audio.
 
 ## Final human-input checklist
+
 - [x] Restore/obtain Sahara credits.
 - [x] Add a repeatable Sahara v2.5 batch benchmark runner.
 - [ ] Verify a real Sahara voice run with the restored credits.
 - [ ] Record or select consented/permitted code-switched benchmark audio.
-- [ ] Run Sahara and at least three comparison ASR models on identical audio and populate benchmark/results.csv.
+- [ ] Run Sahara, Whisper and Meta MMS on identical audio and populate measured results.
 - [ ] Record the 2–3 minute demo video.
 - [ ] Add the demo video URL to this file and README.
 - [ ] Submit the final challenge form before the deadline.

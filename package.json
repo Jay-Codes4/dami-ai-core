@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "desktop:dev": "electron desktop/main.cjs",
     "desktop:build:win": "electron-builder --win nsis --x64 --publish never",
-    "test": "node --test desktop/*.test.cjs voice-gateway/*.test.cjs",
+    "test": "node --test desktop/*.test.cjs voice-gateway/*.test.cjs src/lib/*.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

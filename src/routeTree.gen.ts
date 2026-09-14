@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AskRouteImport } from './routes/ask'
+import { Route as BenchmarkRouteImport } from './routes/benchmark'
 import { Route as CompanionRouteImport } from './routes/companion'
 import { Route as DesktopRouteImport } from './routes/desktop'
 import { Route as DocumentsRouteImport } from './routes/documents'
@@ -21,6 +22,7 @@ import { Route as SourcesRouteImport } from './routes/sources'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as VoiceSttRouteImport } from './routes/voice.stt'
 import { Route as VoiceTtsRouteImport } from './routes/voice.tts'
+import { Route as ApiBenchmarkRunRouteImport } from './routes/api/benchmark.run'
 import { Route as ApiSaharaSttRouteImport } from './routes/api/sahara.stt'
 import { Route as ApiSaharaTtsRouteImport } from './routes/api/sahara.tts'
 
@@ -32,6 +34,11 @@ const IndexRoute = IndexRouteImport.update({
 const AskRoute = AskRouteImport.update({
   id: '/ask',
   path: '/ask',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BenchmarkRoute = BenchmarkRouteImport.update({
+  id: '/benchmark',
+  path: '/benchmark',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CompanionRoute = CompanionRouteImport.update({
@@ -84,6 +91,11 @@ const VoiceTtsRoute = VoiceTtsRouteImport.update({
   path: '/voice/tts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBenchmarkRunRoute = ApiBenchmarkRunRouteImport.update({
+  id: '/api/benchmark/run',
+  path: '/api/benchmark/run',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSaharaSttRoute = ApiSaharaSttRouteImport.update({
   id: '/api/sahara/stt',
   path: '/api/sahara/stt',
@@ -98,6 +110,7 @@ const ApiSaharaTtsRoute = ApiSaharaTtsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/benchmark': typeof BenchmarkRoute
   '/companion': typeof CompanionRoute
   '/desktop': typeof DesktopRoute
   '/documents': typeof DocumentsRoute
@@ -108,12 +121,14 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/voice/stt': typeof VoiceSttRoute
   '/voice/tts': typeof VoiceTtsRoute
+  '/api/benchmark/run': typeof ApiBenchmarkRunRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/benchmark': typeof BenchmarkRoute
   '/companion': typeof CompanionRoute
   '/desktop': typeof DesktopRoute
   '/documents': typeof DocumentsRoute
@@ -124,6 +139,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/voice/stt': typeof VoiceSttRoute
   '/voice/tts': typeof VoiceTtsRoute
+  '/api/benchmark/run': typeof ApiBenchmarkRunRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
@@ -131,6 +147,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/benchmark': typeof BenchmarkRoute
   '/companion': typeof CompanionRoute
   '/desktop': typeof DesktopRoute
   '/documents': typeof DocumentsRoute
@@ -141,6 +158,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/voice/stt': typeof VoiceSttRoute
   '/voice/tts': typeof VoiceTtsRoute
+  '/api/benchmark/run': typeof ApiBenchmarkRunRoute
   '/api/sahara/stt': typeof ApiSaharaSttRoute
   '/api/sahara/tts': typeof ApiSaharaTtsRoute
 }
@@ -149,6 +167,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/ask'
+    | '/benchmark'
     | '/companion'
     | '/desktop'
     | '/documents'
@@ -159,12 +178,14 @@ export interface FileRouteTypes {
     | '/terms'
     | '/voice/stt'
     | '/voice/tts'
+    | '/api/benchmark/run'
     | '/api/sahara/stt'
     | '/api/sahara/tts'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/ask'
+    | '/benchmark'
     | '/companion'
     | '/desktop'
     | '/documents'
@@ -175,12 +196,14 @@ export interface FileRouteTypes {
     | '/terms'
     | '/voice/stt'
     | '/voice/tts'
+    | '/api/benchmark/run'
     | '/api/sahara/stt'
     | '/api/sahara/tts'
   id:
     | '__root__'
     | '/'
     | '/ask'
+    | '/benchmark'
     | '/companion'
     | '/desktop'
     | '/documents'
@@ -191,6 +214,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/voice/stt'
     | '/voice/tts'
+    | '/api/benchmark/run'
     | '/api/sahara/stt'
     | '/api/sahara/tts'
   fileRoutesById: FileRoutesById
@@ -198,6 +222,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AskRoute: typeof AskRoute
+  BenchmarkRoute: typeof BenchmarkRoute
   CompanionRoute: typeof CompanionRoute
   DesktopRoute: typeof DesktopRoute
   DocumentsRoute: typeof DocumentsRoute
@@ -208,6 +233,7 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   VoiceSttRoute: typeof VoiceSttRoute
   VoiceTtsRoute: typeof VoiceTtsRoute
+  ApiBenchmarkRunRoute: typeof ApiBenchmarkRunRoute
   ApiSaharaSttRoute: typeof ApiSaharaSttRoute
   ApiSaharaTtsRoute: typeof ApiSaharaTtsRoute
 }
@@ -226,6 +252,13 @@ declare module '@tanstack/react-router' {
       path: '/ask'
       fullPath: '/ask'
       preLoaderRoute: typeof AskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/benchmark': {
+      id: '/benchmark'
+      path: '/benchmark'
+      fullPath: '/benchmark'
+      preLoaderRoute: typeof BenchmarkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/companion': {
@@ -298,6 +331,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VoiceTtsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/benchmark/run': {
+      id: '/api/benchmark/run'
+      path: '/api/benchmark/run'
+      fullPath: '/api/benchmark/run'
+      preLoaderRoute: typeof ApiBenchmarkRunRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sahara/stt': {
       id: '/api/sahara/stt'
       path: '/api/sahara/stt'
@@ -318,6 +358,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AskRoute: AskRoute,
+  BenchmarkRoute: BenchmarkRoute,
   CompanionRoute: CompanionRoute,
   DesktopRoute: DesktopRoute,
   DocumentsRoute: DocumentsRoute,
@@ -328,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   VoiceSttRoute: VoiceSttRoute,
   VoiceTtsRoute: VoiceTtsRoute,
+  ApiBenchmarkRunRoute: ApiBenchmarkRunRoute,
   ApiSaharaSttRoute: ApiSaharaSttRoute,
   ApiSaharaTtsRoute: ApiSaharaTtsRoute,
 }

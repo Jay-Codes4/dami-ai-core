@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { askDami } from "@/lib/dami.functions";
 import { getDamiLanguage } from "@/lib/languages";
 import { newId, storage } from "@/lib/storage";
+import { buildVoiceTranscript, MAX_LEGAL_QUERY_CHARACTERS } from "@/lib/transcript";
+import { voiceDiagnostic } from "@/lib/voiceDiagnostics";
 import {
   speak,
   startRecording,
@@ -13,7 +15,13 @@ import {
   type SpeechHandle,
 } from "@/services/sahara/browser";
 import { playListeningCue, playListeningEndCue } from "@/services/voice/listeningCue";
-import type { DamiState, ResearchAnswer, ResearchSession, VoiceStage } from "@/lib/types";
+import type {
+  DamiState,
+  ResearchAnswer,
+  ResearchSession,
+  VoiceStage,
+  VoiceTranscript,
+} from "@/lib/types";
 
 const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
   welcome: "welcome",
@@ -22,6 +30,7 @@ const STAGE_TO_ROBOT: Record<VoiceStage, DamiState> = {
   listening: "listening",
   transcribing: "thinking",
   researching: "thinking",
+  thinking: "thinking",
   answered: "success",
   speaking: "speaking",
   error: "error",
@@ -33,6 +42,7 @@ export const STAGE_LABEL: Record<VoiceStage, string> = {
   listening: "Dami is listening. Speak naturally and pause when you're done.",
   transcribing: "Dami is finishing your transcript...",
   researching: "Dami is researching the law and the strongest available authorities...",
+  thinking: "Dami is ranking the evidence and preparing your answer...",
   answered: "I found something useful for you.",
   speaking: "Dami is speaking...",
   error: "Something went wrong.",
@@ -53,12 +63,14 @@ export function useVoiceSession() {
     [error, setError] = useState<string | null>(null),
     [level, setLevel] = useState(0),
     [session, setSession] = useState<ResearchSession | null>(null),
+    [transcript, setTranscript] = useState<VoiceTranscript | null>(null),
     [speechPaused, setSpeechPaused] = useState(false);
   const recorderRef = useRef<Recorder | null>(null),
     speechRef = useRef<SpeechHandle | null>(null),
     levelTimer = useRef<ReturnType<typeof setInterval> | null>(null),
     cancelled = useRef(false),
-    autoStoppingRef = useRef(false);
+    autoStoppingRef = useRef(false),
+    interactionStartedRef = useRef(0);
   const runResearch = useServerFn(askDami);
   const stopLevelMeter = useCallback(() => {
     if (levelTimer.current) clearInterval(levelTimer.current);
@@ -109,6 +121,7 @@ export function useVoiceSession() {
     setAnswer(null);
     setError(null);
     setSession(null);
+    setTranscript(null);
   }, [stopLevelMeter]);
   const stopSpeaking = useCallback(() => {
     speechRef.current?.stop();
@@ -133,6 +146,11 @@ export function useVoiceSession() {
     speechRef.current?.stop();
     setSpeechPaused(false);
     try {
+      voiceDiagnostic("TTS START", {
+        answerCharacters: text.length,
+        language: language.ttsLanguage,
+        accent: settings.voiceAccent || language.preferredAccent,
+      });
       setStage("speaking");
       const handle = await speak(text, {
         accent: settings.voiceAccent || language.preferredAccent,
@@ -142,6 +160,11 @@ export function useVoiceSession() {
       speechRef.current = handle;
       await handle.started;
       if (speechRef.current !== handle) return;
+      voiceDiagnostic("AUDIO PLAYBACK START", {
+        elapsedMs: interactionStartedRef.current
+          ? Math.round(performance.now() - interactionStartedRef.current)
+          : 0,
+      });
       onStarted?.();
       await handle.ended;
       if (speechRef.current === handle) speechRef.current = null;
@@ -156,28 +179,68 @@ export function useVoiceSession() {
     }
   }, []);
   const ask = useCallback(
-    async (text: string) => {
-      // Voice providers can occasionally repeat a segment. Keep the research
-      // RPC inside its documented contract instead of surfacing raw Zod errors.
-      const trimmed = text.trim().slice(0, 1200).trim();
+    async (text: string, suppliedTranscript?: VoiceTranscript) => {
+      const trimmed = text.trim();
       if (trimmed.length < 3) {
         setError("Give me a little more to work with.");
         setStage("error");
         return;
       }
+      if (trimmed.length > MAX_LEGAL_QUERY_CHARACTERS) {
+        setError(
+          `That transcript is ${trimmed.length.toLocaleString()} characters. Keep one turn below ${MAX_LEGAL_QUERY_CHARACTERS.toLocaleString()} characters.`,
+        );
+        setStage("error");
+        return;
+      }
+      if (!interactionStartedRef.current) interactionStartedRef.current = performance.now();
+      const settings = storage.getSettings(),
+        language = getDamiLanguage(settings.speechLanguage),
+        activeTranscript =
+          suppliedTranscript ?? buildVoiceTranscript(trimmed, "typed", language, 0, null);
       cancelled.current = false;
       setQuestion(trimmed);
+      setTranscript(activeTranscript);
       setPartial("");
       setError(null);
       setAnswer(null);
       setStage("researching");
+      voiceDiagnostic("LEGAL INTENT", {
+        originalCharacters: activeTranscript.originalTranscript.length,
+        retrievalCharacters: activeTranscript.normalizedRetrievalQuery.length,
+        engine: activeTranscript.engine,
+        selectedLanguage: activeTranscript.selectedLanguage,
+      });
+      voiceDiagnostic("RETRIEVAL START", { selectedLanguage: activeTranscript.selectedLanguage });
+      const thinkingTimer = window.setTimeout(
+        () => setStage((current) => (current === "researching" ? "thinking" : current)),
+        1200,
+      );
       try {
-        const result = await runResearch({ data: { question: trimmed } });
+        const result = await runResearch({
+          data: {
+            question: trimmed,
+            context: {
+              originalTranscript: activeTranscript.originalTranscript,
+              normalizedRetrievalQuery: activeTranscript.normalizedRetrievalQuery,
+              transcriptEngine: activeTranscript.engine,
+              selectedLanguage: activeTranscript.selectedLanguage,
+              expectedLanguages: activeTranscript.expectedLanguages,
+              codeSwitchedMode: activeTranscript.codeSwitchedMode,
+            },
+          },
+        });
         if (cancelled.current) return;
+        voiceDiagnostic("RETRIEVAL COMPLETE", { citations: result.citations.length });
+        voiceDiagnostic("RESPONSE START", { answerCharacters: result.answer.length });
+        voiceDiagnostic("FIRST TOKEN", {
+          elapsedMs: Math.round(performance.now() - interactionStartedRef.current),
+        });
         const record: ResearchSession = {
           id: newId("ses"),
           conversationId: null,
           question: trimmed,
+          transcript: activeTranscript,
           answer: result,
           createdAt: new Date().toISOString(),
           saved: false,
@@ -185,11 +248,11 @@ export function useVoiceSession() {
         storage.saveSession(record);
         setSession(record);
         setAnswer(result);
-        if (storage.getSettings().speakAnswers) {
-          void readAloud(result.answer);
-        } else {
-          setStage("answered");
-        }
+        voiceDiagnostic("TOTAL INTERACTION TIME", {
+          textReadyMs: Math.round(performance.now() - interactionStartedRef.current),
+        });
+        if (storage.getSettings().speakAnswers) void readAloud(result.answer);
+        else setStage("answered");
       } catch (err) {
         if (cancelled.current) return;
         console.error(err);
@@ -199,6 +262,8 @@ export function useVoiceSession() {
             : "I couldn't complete that research. Please try again.",
         );
         setStage("error");
+      } finally {
+        window.clearTimeout(thinkingTimer);
       }
     },
     [readAloud, runResearch],
@@ -214,15 +279,43 @@ export function useVoiceSession() {
         language = getDamiLanguage(settings.speechLanguage);
       try {
         const samples = await recorder.stop();
-        const result = await transcribeSamples(samples, {
-          language: language.code,
-          codeSwitching: language.codeSwitched,
-          browserTranscript,
+        voiceDiagnostic("AUDIO CAPTURE COMPLETE", {
+          durationMs: samples.durationMs,
+          bytes: samples.blob.size,
         });
+        voiceDiagnostic("SAHARA REQUEST", {
+          language: language.saharaSttLanguage,
+          codeSwitched: language.codeSwitched,
+        });
+        const transcriptionStartedAt = performance.now(),
+          result = await transcribeSamples(samples, {
+            language: language.saharaSttLanguage,
+            codeSwitching: language.codeSwitched,
+            browserTranscript,
+          }),
+          transcriptionLatencyMs = Math.round(performance.now() - transcriptionStartedAt);
         if (cancelled.current) return;
+        const voiceTranscript = buildVoiceTranscript(
+          result.text,
+          result.engine,
+          language,
+          transcriptionLatencyMs,
+          result.requestId,
+        );
+        voiceDiagnostic("SAHARA TRANSCRIPT", {
+          engine: result.engine,
+          language: result.language,
+          characters: result.text.length,
+          latencyMs: transcriptionLatencyMs,
+        });
+        voiceDiagnostic("DETECTED LANGUAGE/CODE-SWITCH", {
+          selectedMode: language.shortLabel,
+          codeSwitched: language.codeSwitched,
+        });
         setPartial("");
         setQuestion(result.text);
-        await ask(result.text);
+        setTranscript(voiceTranscript);
+        await ask(result.text, voiceTranscript);
       } catch (err) {
         if (cancelled.current) return;
         console.error(err);
@@ -246,11 +339,21 @@ export function useVoiceSession() {
       setPartial(fallback);
       setStage("transcribing");
       try {
+        if (!audioBase64) {
+          const settings = storage.getSettings(),
+            language = getDamiLanguage(settings.speechLanguage),
+            voiceTranscript = buildVoiceTranscript(fallback, "windows-speech", language);
+          setPartial("");
+          setTranscript(voiceTranscript);
+          await ask(fallback, voiceTranscript);
+          return;
+        }
         const binary = atob(audioBase64),
           bytes = new Uint8Array(binary.length);
         for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
         const settings = storage.getSettings(),
           language = getDamiLanguage(settings.speechLanguage),
+          transcriptionStartedAt = performance.now(),
           result = await transcribeSamples(
             {
               blob: new Blob([bytes], { type: "audio/wav" }),
@@ -259,22 +362,39 @@ export function useVoiceSession() {
               durationMs: Math.max(250, Math.round((bytes.length / 32000) * 1000)),
             },
             {
-              language: language.code,
+              language: language.saharaSttLanguage,
               codeSwitching: language.codeSwitched,
               browserTranscript: fallback,
             },
+          ),
+          transcriptionLatencyMs = Math.round(performance.now() - transcriptionStartedAt),
+          originalTranscript = result.text.trim() || fallback,
+          voiceTranscript = buildVoiceTranscript(
+            originalTranscript,
+            result.engine,
+            language,
+            transcriptionLatencyMs,
+            result.requestId,
           );
-        const transcript = result.text
-          .replace(/^\s*(?:(?:hey|hi|okay)\s+)?(?:dami|dummy|demi|dammy|darmi)\b[,.:;\s-]*/i, "")
-          .trim();
+        voiceDiagnostic("SAHARA TRANSCRIPT", {
+          engine: result.engine,
+          language: result.language,
+          characters: originalTranscript.length,
+          latencyMs: transcriptionLatencyMs,
+        });
         setPartial("");
-        await ask(transcript || fallback);
+        setTranscript(voiceTranscript);
+        await ask(originalTranscript, voiceTranscript);
       } catch (err) {
         // The OS transcript is only a resilience fallback; Sahara remains the
         // primary transcription path for a wake phrase plus command.
         if (fallback) {
           setPartial("");
-          await ask(fallback);
+          const settings = storage.getSettings(),
+            language = getDamiLanguage(settings.speechLanguage),
+            voiceTranscript = buildVoiceTranscript(fallback, "windows-speech", language);
+          setTranscript(voiceTranscript);
+          await ask(fallback, voiceTranscript);
           return;
         }
         setError(err instanceof Error ? err.message : "I couldn't transcribe that wake request.");
@@ -284,19 +404,28 @@ export function useVoiceSession() {
     [ask],
   );
   const startListening = useCallback(async () => {
+    interactionStartedRef.current = performance.now();
     cancelled.current = false;
     autoStoppingRef.current = false;
     setError(null);
     setAnswer(null);
     setPartial("");
     setQuestion("");
+    setTranscript(null);
     setStage("requesting-permission");
     const settings = storage.getSettings(),
       language = getDamiLanguage(settings.speechLanguage);
     try {
-      const recorder = await startRecording(settings.maxRecordingSeconds, language.code);
+      const recorder = await startRecording(
+        settings.maxRecordingSeconds,
+        language.saharaSttLanguage,
+      );
       recorderRef.current = recorder;
       setStage("listening");
+      voiceDiagnostic("LISTENING START", {
+        language: language.saharaSttLanguage,
+        codeSwitched: language.codeSwitched,
+      });
       void playListeningCue();
       const startedAt = Date.now();
       let noiseFloor = 0.01,
@@ -382,9 +511,9 @@ export function useVoiceSession() {
   }, [stopLevelMeter]);
   const retry = useCallback(() => {
     setError(null);
-    if (question) void ask(question);
+    if (question) void ask(question, transcript ?? undefined);
     else setStage("idle");
-  }, [ask, question]);
+  }, [ask, question, transcript]);
   return {
     stage,
     robotState: STAGE_TO_ROBOT[stage] as DamiState,
@@ -395,8 +524,9 @@ export function useVoiceSession() {
     error,
     level,
     session,
+    transcript,
     speechPaused,
-    isBusy: stage === "transcribing" || stage === "researching",
+    isBusy: stage === "transcribing" || stage === "researching" || stage === "thinking",
     startListening,
     askWakeCapture,
     stopListening,

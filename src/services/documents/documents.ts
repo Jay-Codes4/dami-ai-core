@@ -13,10 +13,7 @@ import type { ResearchSession, SavedDocument, SavedDocumentKind } from "@/lib/ty
 const DISCLAIMER =
   "Dami AI provides legal information and research assistance. It is not a substitute for advice from a qualified lawyer. Verify every authority at its official source.";
 
-export function composeDocument(
-  session: ResearchSession,
-  kind: SavedDocumentKind,
-): SavedDocument {
+export function composeDocument(session: ResearchSession, kind: SavedDocumentKind): SavedDocument {
   const { question, answer } = session;
   const date = new Date(session.createdAt).toLocaleDateString("en-GB", {
     day: "numeric",

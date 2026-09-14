@@ -26,7 +26,7 @@ const TTS_ACCENTS = new Set([
   "zulu",
   "pidgin",
 ]);
-const TTS_LANGUAGES = new Set(["en", "yo", "sw", "pcm"]);
+const TTS_LANGUAGES = new Set(["en", "ig", "yo", "sw", "pcm"]);
 const TTS_FORMATS = new Set(["wav", "opus"]);
 const TERMINAL_MESSAGES = new Set([
   "AUTHENTICATION_ERROR",

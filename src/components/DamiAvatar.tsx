@@ -30,10 +30,10 @@ export function DamiAvatar({ state = "idle", size = 220, className, level = 0 }:
     }
 
     let index = 0;
-    setMotionBeat(IDLE_BEATS[index]);
+    setMotionBeat(IDLE_BEATS[index]!);
     const timer = window.setInterval(() => {
       index = (index + 1) % IDLE_BEATS.length;
-      setMotionBeat(IDLE_BEATS[index]);
+      setMotionBeat(IDLE_BEATS[index]!);
     }, 1800);
     return () => window.clearInterval(timer);
   }, [state]);

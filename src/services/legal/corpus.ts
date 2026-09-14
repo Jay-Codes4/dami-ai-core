@@ -76,8 +76,7 @@ export const LEGAL_CORPUS: LegalSource[] = [
   },
   {
     id: "gh-const-1992-art33",
-    title:
-      "Constitution of the Republic of Ghana, 1992 — Enforcement of fundamental human rights",
+    title: "Constitution of the Republic of Ghana, 1992 — Enforcement of fundamental human rights",
     authority: "Consultative Assembly / Republic of Ghana",
     jurisdiction: "Ghana",
     docType: "constitution",

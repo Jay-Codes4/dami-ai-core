@@ -39,7 +39,9 @@ const wss = new WebSocketServer({ server });
 wss.on("connection", (client, request) => {
   const apiKey = process.env.INTRON_API_KEY;
   if (!apiKey) {
-    client.send(JSON.stringify({ message_type: "PROXY_ERROR", message: "Sahara voice is not configured." }));
+    client.send(
+      JSON.stringify({ message_type: "PROXY_ERROR", message: "Sahara voice is not configured." }),
+    );
     safeClose(client, 1011, "Missing server voice configuration");
     return;
   }
@@ -68,25 +70,39 @@ wss.on("connection", (client, request) => {
   client.on("message", (raw) => {
     const text = raw.toString();
     if (text.length > 2048) {
-      client.send(JSON.stringify({ message_type: "PROXY_ERROR", message: "Voice message too large." }));
+      client.send(
+        JSON.stringify({ message_type: "PROXY_ERROR", message: "Voice message too large." }),
+      );
       return;
     }
 
     try {
       const parsed = JSON.parse(text) as { message_type?: string; text?: string };
-      if (!parsed.message_type || !["INPUT_TEXT_CHUNK", "FETCH_AUDIO_CHUNK", "COMMIT"].includes(parsed.message_type)) {
-        client.send(JSON.stringify({ message_type: "PROXY_ERROR", message: "Unsupported voice message." }));
+      if (
+        !parsed.message_type ||
+        !["INPUT_TEXT_CHUNK", "FETCH_AUDIO_CHUNK", "COMMIT"].includes(parsed.message_type)
+      ) {
+        client.send(
+          JSON.stringify({ message_type: "PROXY_ERROR", message: "Unsupported voice message." }),
+        );
         return;
       }
       if (parsed.message_type === "INPUT_TEXT_CHUNK") {
         const length = parsed.text?.trim().length ?? 0;
         if (length < 10 || length > 100) {
-          client.send(JSON.stringify({ message_type: "PROXY_ERROR", message: "Streaming text chunks must be 10-100 characters." }));
+          client.send(
+            JSON.stringify({
+              message_type: "PROXY_ERROR",
+              message: "Streaming text chunks must be 10-100 characters.",
+            }),
+          );
           return;
         }
       }
     } catch {
-      client.send(JSON.stringify({ message_type: "PROXY_ERROR", message: "Invalid voice message." }));
+      client.send(
+        JSON.stringify({ message_type: "PROXY_ERROR", message: "Invalid voice message." }),
+      );
       return;
     }
 
@@ -106,7 +122,12 @@ wss.on("connection", (client, request) => {
   upstream.on("error", (error) => {
     console.error("Sahara streaming TTS upstream error", error);
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ message_type: "PROXY_ERROR", message: "Sahara streaming voice is temporarily unavailable." }));
+      client.send(
+        JSON.stringify({
+          message_type: "PROXY_ERROR",
+          message: "Sahara streaming voice is temporarily unavailable.",
+        }),
+      );
     }
   });
 

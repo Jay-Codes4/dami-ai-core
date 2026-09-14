@@ -14,10 +14,14 @@ type DesktopVoiceBridge = {
   stopLocalSpeech?: () => Promise<boolean>;
 };
 const VOICE_TTS_WS_URL = (
-  (import.meta.env.VITE_DAMI_VOICE_WS_URL as string | undefined) ||
+  (import.meta.env["VITE_DAMI_VOICE_WS_URL"] as string | undefined) ||
   "wss://dami-ai-core-1.onrender.com/stt"
 ).replace(/\/stt(?:\?.*)?$/, "/tts");
 const STREAM_START_TIMEOUT_MS = 4500;
+export async function prepareAudioPlayback() {
+  if (typeof window !== "undefined" && "speechSynthesis" in window)
+    window.speechSynthesis.getVoices();
+}
 function cleanSpeechText(text: string) {
   return text
     .replace(/\[(?:S\d+)\]/g, "")
@@ -34,6 +38,7 @@ function cleanSpeechText(text: string) {
     .trim();
 }
 function normaliseVoice(o: VoiceOptions): VoiceOptions {
+  if (o.language === "ig") return { language: "ig", accent: "igbo", gender: "female" };
   if (o.language === "sw") return { language: "sw", accent: "swahili", gender: "female" };
   if (o.language === "yo") return { language: "yo", accent: "yoruba", gender: "female" };
   if (o.language === "pcm") return { language: "pcm", accent: "pidgin", gender: "female" };
@@ -62,7 +67,11 @@ function browserSpeech(text: string, o: VoiceOptions): SpeechHandle {
           !knownMale.test(v.name) &&
           v.lang.toLowerCase().startsWith("en"),
       );
-  if (preferred) u.voice = preferred;
+  if (!preferred)
+    throw new Error(
+      "Dami's African female voice is temporarily unavailable. The complete written answer is still shown.",
+    );
+  u.voice = preferred;
   let settled = false,
     paused = false,
     startedDone = false;
@@ -315,7 +324,7 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
   let startTimer = 0;
   try {
     firstBlob = await Promise.race([
-      deferreds[0].promise,
+      deferreds[0]!.promise,
       new Promise<Blob>(
         (_resolve, reject) =>
           (startTimer = window.setTimeout(
@@ -377,7 +386,7 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     try {
       await playBlob(firstBlob);
       for (index = 1; index < deferreds.length && !stopped; index++)
-        await playBlob(await deferreds[index].promise);
+        await playBlob(await deferreds[index]!.promise);
     } catch {
       if (!stopped) {
         const remaining = chunks.slice(index).join(" ") || clean,
