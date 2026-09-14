@@ -18,6 +18,8 @@ export interface TranscriptionResult {
   text: string;
   durationMs: number;
   requestId: string | null;
+  engine: "sahara-stt" | "windows-speech";
+  language: string;
 }
 
 export interface SpeechHandle {

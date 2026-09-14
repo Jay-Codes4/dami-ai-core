@@ -18,7 +18,8 @@ export const Route = createFileRoute("/sources")({
       { property: "og:title", content: "Ghanaian legal sources — Dami AI" },
       {
         property: "og:description",
-        content: "The verified Ghanaian authorities Dami researches from, each linked to its official home.",
+        content:
+          "The verified Ghanaian authorities Dami researches from, each linked to its official home.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

@@ -4,7 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Citation, LegalSource } from "@/lib/types";
 
-type SourceLike = Pick<LegalSource, "title" | "authority" | "locator" | "url" | "officialSource"> & {
+type SourceLike = Pick<
+  LegalSource,
+  "title" | "authority" | "locator" | "url" | "officialSource"
+> & {
   summary?: string;
   passage?: string;
   year?: number | null;

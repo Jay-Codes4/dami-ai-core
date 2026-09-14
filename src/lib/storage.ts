@@ -6,6 +6,7 @@
  * builds can swap in a Postgres-backed adapter without touching UI code.
  */
 
+import { isDamiLanguageCode } from "./languages";
 import type { DamiSettings, ResearchSession, SavedDocument } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
 
@@ -75,7 +76,18 @@ export const localStorageAdapter: DamiStorage = {
       read<SavedDocument[]>(KEYS.documents, []).filter((d) => d.id !== id),
     );
   },
-  getSettings: () => ({ ...DEFAULT_SETTINGS, ...read<Partial<DamiSettings>>(KEYS.settings, {}) }),
+  getSettings: () => {
+    const saved = read<Partial<DamiSettings>>(KEYS.settings, {});
+    return {
+      ...DEFAULT_SETTINGS,
+      ...saved,
+      speechLanguage: isDamiLanguageCode(saved.speechLanguage)
+        ? saved.speechLanguage
+        : DEFAULT_SETTINGS.speechLanguage,
+      codeSwitching: true,
+      voiceGender: "female",
+    };
+  },
   setSettings: (settings) => write(KEYS.settings, settings),
 };
 

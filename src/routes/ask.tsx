@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowDownToLine, ArrowUpToLine, Loader2, Mic, Send, Square, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Mic, Send, Square, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { AnswerPanel } from "@/components/AnswerPanel";
 import { AppShell } from "@/components/AppShell";
 import { DamiAvatar } from "@/components/DamiAvatar";
@@ -8,7 +8,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useVoiceSession } from "@/hooks/useVoiceSession";
-import { getDesktopBridge, type DesktopDock } from "@/lib/desktop";
 import { DAMI_LANGUAGES, getDamiLanguage, type DamiLanguageCode } from "@/lib/languages";
 import { storage } from "@/lib/storage";
 export const Route = createFileRoute("/ask")({ component: AskPage });
@@ -18,19 +17,10 @@ function AskPage() {
   const [languageCode, setLanguageCode] = useState<DamiLanguageCode>(
     () => storage.getSettings().speechLanguage,
   );
-  const [desktopDock, setDesktopDock] = useState<DesktopDock | null>(null);
   const avatarActivationRef = useRef(false);
   const listening = voice.stage === "listening",
     busy = voice.isBusy,
     selectedLanguage = useMemo(() => getDamiLanguage(languageCode), [languageCode]);
-  useEffect(() => {
-    const bridge = getDesktopBridge();
-    if (bridge)
-      void bridge
-        .getDock()
-        .then(setDesktopDock)
-        .catch(() => setDesktopDock("top"));
-  }, []);
   const changeLanguage = (value: DamiLanguageCode) => {
     const language = getDamiLanguage(value),
       current = storage.getSettings();
@@ -41,13 +31,6 @@ function AskPage() {
       voiceAccent: language.preferredAccent,
     });
     setLanguageCode(value);
-  };
-  const changeDock = async (dock: DesktopDock) => {
-    const bridge = getDesktopBridge();
-    if (!bridge) return;
-    const next = await bridge.setDock(dock);
-    setDesktopDock(next);
-    storage.setSettings({ ...storage.getSettings(), desktopDock: next });
   };
   const activateAvatar = async () => {
     if (avatarActivationRef.current || listening || busy) return;
@@ -79,26 +62,6 @@ function AskPage() {
               Listening mode: {selectedLanguage.shortLabel}
             </p>
           </div>
-          {desktopDock && (
-            <div className="flex items-center gap-2 rounded-lg border p-1">
-              <Button
-                size="sm"
-                variant={desktopDock === "top" ? "secondary" : "ghost"}
-                onClick={() => void changeDock("top")}
-              >
-                <ArrowUpToLine className="mr-1 h-4 w-4" />
-                Top
-              </Button>
-              <Button
-                size="sm"
-                variant={desktopDock === "bottom" ? "secondary" : "ghost"}
-                onClick={() => void changeDock("bottom")}
-              >
-                <ArrowDownToLine className="mr-1 h-4 w-4" />
-                Bottom
-              </Button>
-            </div>
-          )}
           <label className="w-full text-left text-xs font-medium text-muted-foreground">
             Voice language
             <select
@@ -168,14 +131,31 @@ function AskPage() {
           </form>
         </aside>
         <section className="min-w-0 space-y-4 sm:space-y-6">
-          {(listening || voice.stage === "transcribing") && (
-            <div className="rounded-xl border bg-card p-4 sm:p-5">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
-                Live transcript
-              </p>
+          {(listening || voice.stage === "transcribing" || voice.transcript) && (
+            <div className="border bg-card p-4 sm:p-5" aria-live="polite">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                  {voice.transcript ? "Original voice transcript" : "Live transcript"}
+                </p>
+                {voice.transcript && (
+                  <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                    {voice.transcript.engine === "sahara-stt"
+                      ? "Sahara STT"
+                      : "Resilience transcript"}
+                  </span>
+                )}
+              </div>
               <p className="min-h-12 whitespace-pre-wrap text-base leading-7">
-                {voice.partial || "Start speaking and your words will appear here…"}
+                {voice.transcript?.originalTranscript ||
+                  voice.partial ||
+                  "Start speaking and your words will appear here…"}
               </p>
+              {voice.transcript?.engine !== "sahara-stt" && voice.transcript && (
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  Sahara was unavailable for this turn, so Dami used the Windows resilience
+                  transcript. Retry before using this turn as benchmark evidence.
+                </p>
+              )}
             </div>
           )}
           {voice.stage === "error" && voice.error && (

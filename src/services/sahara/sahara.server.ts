@@ -44,6 +44,8 @@ export interface SttResult {
   text: string;
   requestId: string | null;
   durationMs: number;
+  engine: "sahara-stt";
+  language: string;
 }
 
 function decodeBase64(value: string): Uint8Array {
@@ -90,7 +92,11 @@ async function sendSttRequest(
   const fileName = `dami-${Date.now()}.wav`;
   const form = new FormData();
   form.set("audio_file_name", fileName);
-  form.set("audio_file_blob", new Blob([wav], { type: "audio/wav" }), fileName);
+  const wavBuffer = wav.buffer.slice(
+    wav.byteOffset,
+    wav.byteOffset + wav.byteLength,
+  ) as ArrayBuffer;
+  form.set("audio_file_blob", new Blob([wavBuffer], { type: "audio/wav" }), fileName);
   form.set("use_category", "file_category_legal");
   form.set("use_language_asr_input", language || "en");
   // Dami's own legal agent performs the downstream reasoning, so Sahara does not
@@ -124,15 +130,8 @@ export async function transcribe(request: SttRequest): Promise<SttResult> {
   }
   const wav = pcm16ToWav(pcm, request.sampleRate);
 
-  let attempt = await sendSttRequest(wav, request.language || "en", key);
-  if (
-    !attempt.response.ok &&
-    request.language &&
-    request.language !== "en" &&
-    attempt.response.status === 400
-  ) {
-    attempt = await sendSttRequest(wav, "en", key);
-  }
+  const language = request.language || "en";
+  const attempt = await sendSttRequest(wav, language, key);
 
   if (!attempt.response.ok) {
     const upstream =
@@ -144,13 +143,14 @@ export async function transcribe(request: SttRequest): Promise<SttResult> {
       status: attempt.response.status,
       upstream,
     });
-    const message =
-      upstream ||
-      (attempt.response.status === 401 || attempt.response.status === 403
-        ? "Sahara couldn't authenticate the speech request. Check the production INTRON_API_KEY."
-        : attempt.response.status === 429
-          ? "Sahara is receiving too many speech requests right now. Please try again in a moment."
-          : `Sahara could not transcribe that recording (HTTP ${attempt.response.status}).`);
+    const message = /required language not available/i.test(upstream)
+      ? `Sahara's ${language} speech session is temporarily unavailable. Please retry this recording shortly.`
+      : upstream ||
+        (attempt.response.status === 401 || attempt.response.status === 403
+          ? "Sahara couldn't authenticate the speech request. Check the production INTRON_API_KEY."
+          : attempt.response.status === 429
+            ? "Sahara is receiving too many speech requests right now. Please try again in a moment."
+            : `Sahara could not transcribe that recording (HTTP ${attempt.response.status}).`);
     throw new SaharaRequestError(message);
   }
 
@@ -159,6 +159,8 @@ export async function transcribe(request: SttRequest): Promise<SttResult> {
     text: text.trim(),
     requestId: attempt.payload?.data?.file_id ?? null,
     durationMs: Date.now() - started,
+    engine: "sahara-stt",
+    language,
   };
 }
 
@@ -188,7 +190,7 @@ export async function synthesize(
     body: JSON.stringify({
       text: request.text.slice(0, 4096),
       voice_accent: request.accent,
-      voice_gender: request.gender,
+      voice_gender: "female",
       voice_language: request.language || "en",
       output_audio_format: "wav",
     }),

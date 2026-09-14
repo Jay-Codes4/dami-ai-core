@@ -2,7 +2,7 @@
 
 > Voice-first African legal research for the Sahara CodeSwitch Africa Challenge.
 
-Dami lets a user speak a legal question naturally, including supported African code-switching, then performs the downstream task: jurisdiction-aware legal research, source retrieval, legal reasoning, citations, and a spoken response.
+Dami AI is a voice-first, code-switching African legal AI assistant powered by Sahara speech technology. A user can speak naturally in English, Igbo, Nigerian Pidgin, or supported mixtures, and Dami turns that transcript into jurisdiction-aware legal research, source retrieval, legal reasoning, citations, and a spoken response.
 
 ## Problem & Solution
 
@@ -20,14 +20,14 @@ Windows companion: [Download the newest Dami installer](https://github.com/Jay-C
 
 ### Fast judge path
 
-**On the web:** open **Ask Dami**, then single-click or double-click Dami's avatar (or select **Talk with Dami**). Begin speaking after the rising cue. The on-screen label changes through **Dami is listening → transcribing → researching → speaking**, and the complete answer remains visible with its sources.
+**On the web:** open **Ask Dami**, choose English, Igbo, or Nigerian Pidgin, then click or double-click Dami's avatar (or select **Talk with Dami**). Begin speaking after the rising cue. Speak naturally and code-switch inside the same sentence; Dami keeps the original mixed transcript visible. The on-screen label changes through **Dami is listening → transcribing → researching → thinking → speaking**, and the complete answer remains visible with its sources.
 
 **On Windows:** install the latest release, wait for the floating avatar to say **Click me · or say “Hey Dami”**, then either say **“Hey Dami”** or single-click/double-click the avatar. The rising cue means the microphone is listening; the descending cue means recording ended. The status pill always shows what Dami is doing.
 
-Core flow:
+The real competition flow is:
 
 ```text
-Voice → Sahara STT → legal research/search → legal reasoning → cited answer → Sahara TTS
+Microphone → Sahara STT → original code-switched transcript → normalized retrieval query → legal intent → Exa source retrieval/ranking → Groq grounded answer → citations → African female voice
 ```
 
 Dami also ships as a Windows Electron companion. Installed Dami floats on the desktop and supports hands-free **“Hey Dami”** activation. The Windows build uses continuous native Windows speech recognition with an accent-tolerant wake grammar and dictation fallback, then starts Dami's normal voice workflow. Single-clicking or double-clicking the avatar is an equally supported activation method.
@@ -38,7 +38,7 @@ Wake interaction supports both a two-step prompt (`Hey Dami` → listening cue �
 
 Windows installation, browser-download warnings, SmartScreen steps, microphone permissions, and the judge test flow are documented in [`INSTALL_WINDOWS.md`](INSTALL_WINDOWS.md).
 
-Current launch language set: English, Akan↔English, Yoruba↔English, Swahili↔English, and Nigerian Pidgin↔English.
+Competition language set: **English, Igbo and Nigerian Pidgin**. Sahara's documented `ig` and `pcm` modes cover Igbo-English and Pidgin-English code-switching without requiring the speaker to change language mid-utterance. Dami never invents an unsupported `AUTO` code. The original transcript and normalized retrieval query remain separate.
 
 ## Code & Technical Notes
 
@@ -50,16 +50,22 @@ Current launch language set: English, Akan↔English, Yoruba↔English, Swahili�
 - Exa live source retrieval
 - Groq legal reasoning
 - Server-side secrets only; no API keys in client bundles
-- Voice states: listening → transcribing → researching → speaking
+- Visible voice states: listening → transcribing → researching → thinking → speaking → error/retry
 - Source-grounded legal answers with jurisdiction awareness
 
 The Sahara streaming gateway follows the documented session flow: connect, wait for `SESSION_CREATED`, stream audio chunks, commit, and receive the final transcript.
 
-## Benchmark Results
+## Reproducible benchmark mode
 
-The challenge requires code-switched ASR benchmarking. Dami's reproducible framework is in [`benchmark/`](benchmark/).
+The protected development/admin interface is available at `/benchmark` when `DAMI_BENCHMARK_ENABLED=true`. It can record or upload one consented sample and sends the exact same audio bytes independently and concurrently to:
 
-The comparison is designed for Sahara plus three other speech models on identical audio. It records WER, CER, legal-term accuracy, code-switch token accuracy, latency, language pair, accent/country, device, and noise condition.
+1. Intron Sahara v2.5 (primary competition ASR)
+2. OpenAI Whisper
+3. Meta MMS 1B All
+
+It automatically measures Unicode-aware WER, CER and provider latency. Testers enter explicit switched words/phrases and critical legal entities; Dami scores exact normalized preservation deterministically so every score is reviewable. Each successful transcript independently enters the same Dami legal agent, and the reviewer records intent, retrieval, grounding and citation PASS/FAIL signals. Results aggregate per language category and overall, then export as CSV or JSON.
+
+The batch framework in [`benchmark/`](benchmark/) runs the same comparison offline and supports additional models and samples. The suggested 30-sample plan intentionally emphasizes English-Igbo, English-Pidgin and three-language speech; it is not hardcoded.
 
 Intron credits have been restored, so the Sahara execution path is ready. Actual benchmark rows remain empty until permitted test audio is added to `benchmark/manifest.csv` and the models are run; no result is estimated or fabricated.
 
@@ -68,6 +74,8 @@ Run a Sahara smoke test with:
 ```bash
 $env:INTRON_API_KEY="your-key"
 python benchmark/run_sahara.py --limit 3
+python benchmark/run_faster_whisper.py --model large-v3
+python benchmark/run_mms.py
 python benchmark/score.py benchmark/results.csv
 ```
 
@@ -85,11 +93,12 @@ Dami's submission approach covers privacy and consent, legal safety, source inte
 - [x] Windows desktop companion
 - [x] Hands-free “Hey Dami” desktop activation
 - [x] Code and technical documentation
-- [x] Reproducible benchmark framework
+- [x] Protected browser benchmark route, automatic WER/CER, reviewable code-switch/entity scoring, downstream task checks, aggregates and exports
+- [x] Reproducible Sahara, Whisper and Meta MMS batch runners
 - [x] Responsible AI note
 - [x] Sahara credits restored / benchmark runner ready
 - [ ] Add permitted code-switched benchmark audio + reference transcripts
-- [ ] Populate measured results for Sahara + three comparison models
+- [ ] Populate measured results for Sahara + Whisper + Meta MMS
 - [ ] Record final short prototype demo video
 
 ## Repository Map

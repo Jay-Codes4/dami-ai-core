@@ -18,18 +18,13 @@ export type VoiceStage =
   | "listening"
   | "transcribing"
   | "researching"
+  | "thinking"
   | "answered"
   | "speaking"
   | "error";
 
 export type DamiState =
-  | "idle"
-  | "welcome"
-  | "listening"
-  | "thinking"
-  | "speaking"
-  | "success"
-  | "error";
+  "idle" | "welcome" | "listening" | "thinking" | "speaking" | "success" | "error";
 
 export interface User {
   id: string;
@@ -60,16 +55,25 @@ export interface Transcript {
   partialText: string;
   finalText: string;
   durationMs: number;
-  engine: "sahara-stt" | "browser-speech" | "typed";
+  engine: TranscriptEngine;
   createdAt: ISODateString;
 }
 
+export type TranscriptEngine = "sahara-stt" | "windows-speech" | "browser-speech" | "typed";
+
+export interface VoiceTranscript {
+  originalTranscript: string;
+  normalizedRetrievalQuery: string;
+  engine: TranscriptEngine;
+  selectedLanguage: DamiLanguageCode;
+  expectedLanguages: string[];
+  codeSwitchedMode: boolean;
+  transcriptionLatencyMs: number;
+  requestId: string | null;
+}
+
 export type LegalDocumentType =
-  | "constitution"
-  | "legislation"
-  | "case-law"
-  | "regulation"
-  | "public-service-guidance";
+  "constitution" | "legislation" | "case-law" | "regulation" | "public-service-guidance";
 
 export interface LegalSource {
   id: string;
@@ -109,12 +113,23 @@ export interface ResearchAnswer {
   citations: Citation[];
   insufficientEvidence: boolean;
   limitations: string;
+  workflow?: LegalWorkflowTrace;
+}
+
+export interface LegalWorkflowTrace {
+  originalTranscript: string;
+  normalizedRetrievalQuery: string;
+  transcriptEngine: TranscriptEngine;
+  selectedLanguage: DamiLanguageCode;
+  expectedLanguages: string[];
+  codeSwitchedMode: boolean;
 }
 
 export interface ResearchSession {
   id: string;
   conversationId: string | null;
   question: string;
+  transcript?: VoiceTranscript;
   answer: ResearchAnswer;
   createdAt: ISODateString;
   saved: boolean;
@@ -140,6 +155,7 @@ export interface DamiSettings {
   speakAnswers: boolean;
   maxRecordingSeconds: number;
   codeSwitching: boolean;
+  /** Retained for backwards-compatible Electron settings sync; hidden from the UI. */
   desktopDock: "top" | "bottom";
   wakeWordEnabled: boolean;
   floatingAvatarEnabled: boolean;

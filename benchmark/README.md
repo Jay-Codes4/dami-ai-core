@@ -4,22 +4,24 @@ This folder contains the reproducible benchmark required for the Sahara CodeSwit
 
 ## Required comparison
 
-Run identical audio through four systems:
+Run identical audio through three systems:
 
 1. **Intron Sahara v2.5** — required challenge model
 2. **faster-whisper large-v3** — global/open Whisper baseline
-3. **A code-switch/African ASR model** through `run_hf_asr.py`
-4. **A second independent ASR model** through `run_hf_asr.py` or another documented provider
+3. **Meta MMS 1B All** — multilingual/African-language baseline through `run_mms.py`
 
-This satisfies the submission requirement to compare Sahara against at least three other speech models.
+The `/benchmark` admin route mirrors this three-model comparison and also runs every successful transcript through Dami's legal agent. `run_hf_asr.py` remains available for optional additional models.
 
 ## Test audio
 
 Preferred benchmark source: **intronhealth/AfriSwitch**, an evaluation-only, human-transcribed code-switch benchmark released under **CC BY-NC-SA 4.0**. The repository is gated on Hugging Face, so the participant must accept its access conditions before downloading it.
 
-For Dami, prioritize Yoruba-English, Igbo-English, Hausa-English, Pidgin-English, Akan-English or Swahili-English samples, with a legal/public-service supplemental set where consent/license permits.
+For Dami, use English, Igbo, Nigerian Pidgin, English-Igbo, English-Pidgin, Igbo-Pidgin and English-Igbo-Pidgin samples, with a legal/public-service supplemental set where consent/license permits.
+
+Suggested initial distribution: English 3, Igbo 3, Pidgin 3, English-Igbo 7, English-Pidgin 5, Igbo-Pidgin 3 and three-language 6 (30 total). The tools support any sample count.
 
 For every sample in `manifest.csv`, record:
+
 - sample_id and local audio_path
 - reference transcript
 - language pair
@@ -62,9 +64,11 @@ The Sahara runner uses the documented synchronous endpoint, disables LLM transcr
 # Global Whisper baseline
 python benchmark/run_faster_whisper.py --model large-v3
 
-# Two additional Hugging Face ASR models; replace IDs with the final selected models
-python benchmark/run_hf_asr.py MODEL_ID_1
-python benchmark/run_hf_asr.py MODEL_ID_2
+# Selected multilingual/African baseline
+python benchmark/run_mms.py
+
+# Optional fourth model
+python benchmark/run_hf_asr.py MODEL_ID
 ```
 
 Use the **same manifest and audio files for every model**. Record model/version, hardware and any decoding settings in the final report.
@@ -72,6 +76,7 @@ Use the **same manifest and audio files for every model**. Record model/version,
 ## Metrics
 
 `score.py` calculates:
+
 - WER
 - CER
 - legal-term accuracy
@@ -84,3 +89,11 @@ python benchmark/score.py benchmark/results.csv
 ```
 
 Do not edit hypotheses to improve scores. Do not estimate missing measurements.
+
+## Browser/admin benchmark
+
+Set `DAMI_BENCHMARK_ENABLED=true`, configure a long random `DAMI_BENCHMARK_ACCESS_TOKEN`, and configure the provider variables listed in `.env.example`. Open `/benchmark`, enter the token, record or upload a permitted sample, provide the exact reference transcript, then run and review the comparison. Production requests are rejected unless the feature flag and server-side token are both present.
+
+The browser stores only result records in local storage; it does not persist uploaded/recorded audio. Provider failures receive null metrics and remain visible. CSV and JSON exports include raw transcripts, SHA-256 audio identity, WER/CER, latency, code-switch/entity scores, downstream legal-task checks, citations, notes and timestamps.
+
+Meta MMS uses one adapter at a time (`eng`, `ibo` or `pcm`). For mixed samples the African-language adapter is recorded; the report must not describe MMS as simultaneous code-switch ASR. Sahara documents `ig` for Igbo-English and `pcm` for Pidgin-English, but not an Igbo-Pidgin/trilingual code. Dami marks those combinations experimental and never invents an `AUTO` language code.

@@ -4,7 +4,7 @@ Dami is a voice-first legal research assistant built for the Sahara CodeSwitch A
 
 ## Privacy and consent
 
-Users should knowingly activate Dami before their legal question is sent for transcription or research. The installed Windows companion uses a narrow local wake-phrase grammar for “Hey Dami”; activation starts the actual Dami voice workflow. API credentials remain server-side and must never be exposed in the browser or committed to the repository.
+Users should knowingly activate Dami before their legal question is sent for transcription or research. The installed Windows companion uses a narrow local wake-phrase grammar for “Hey Dami”; activation starts the actual Dami voice workflow. Microphone tracks stop after the turn and Dami does not permanently store user audio by default. API credentials remain server-side and must never be exposed in the browser or committed to the repository.
 
 Benchmark recordings must be consented, appropriately licensed, or otherwise permitted for evaluation. Private client communications, privileged material, confidential case files, and personally identifying recordings must not be added to the public benchmark repository.
 
@@ -18,7 +18,7 @@ Dami must not fabricate legislation, cases, judges, quotations, sections, dates,
 
 African accents, background noise, names, legal terminology, and code-switch boundaries can produce transcription errors. A fluent transcript is not proof that it is correct. Users should be able to inspect the transcript and sources before relying on the output.
 
-Benchmark results must report measured outputs without selectively editing model transcripts. Test conditions and model identity should be recorded so comparisons remain reviewable.
+Benchmark results must report measured outputs without selectively editing model transcripts. Failed/unconfigured models receive null metrics, never zero or an invented score. Test conditions, provider configuration, raw transcript and model identity should be recorded so comparisons remain reviewable.
 
 ## Inclusion and fairness
 

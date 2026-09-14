@@ -16,9 +16,9 @@ const SttBody = z.object({
 
 const TtsBody = z.object({
   text: z.string().min(1).max(6000),
-  accent: z.string().default("ghanaian"),
+  accent: z.string().default("yoruba"),
   gender: z.string().default("female"),
-  language: z.string().default("en-GH"),
+  language: z.string().default("en"),
 });
 
 export async function handleSaharaStt(request: Request) {
