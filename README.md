@@ -57,13 +57,15 @@ The Sahara streaming gateway follows the documented session flow: connect, wait 
 
 ## Reproducible benchmark mode
 
-The protected development/admin interface is available at `/benchmark` when `DAMI_BENCHMARK_ENABLED=true`. It can record or upload one consented sample and sends the exact same audio bytes independently and concurrently to:
+**Judges / evaluators:** open the deployed [Dami Benchmark](https://dami-ai-core.vercel.app/benchmark) to inspect and run the reproducible ASR comparison. This evidence tool is intentionally isolated from the main Ask Dami demo so benchmark changes cannot alter the competition voice/legal workflow.
+
+The protected benchmark interface is available at `/benchmark` when `DAMI_BENCHMARK_ENABLED=true`. It can record or upload one consented sample and sends the exact same audio bytes independently and concurrently to:
 
 1. Intron Sahara v2.5 (primary competition ASR)
 2. OpenAI Whisper
 3. Meta MMS 1B All
 
-It automatically measures Unicode-aware WER, CER and provider latency. Testers enter explicit switched words/phrases and critical legal entities; Dami scores exact normalized preservation deterministically so every score is reviewable. Each successful transcript independently enters the same Dami legal agent, and the reviewer records intent, retrieval, grounding and citation PASS/FAIL signals. Results aggregate per language category and overall, then export as CSV or JSON.
+Supported benchmark categories include English, Igbo, Nigerian Pidgin, Yoruba, English + Igbo, English + Pidgin, and English + Yoruba, with the existing experimental Igbo/Pidgin combinations clearly labelled. It automatically measures Unicode-aware WER, CER and provider latency. Testers enter explicit switched words/phrases and critical legal entities; Dami scores exact normalized preservation deterministically so every score is reviewable. Each successful transcript independently enters the same Dami legal agent, and the reviewer records intent, retrieval, grounding and citation PASS/FAIL signals. Results aggregate per language category and overall, then export as CSV or JSON.
 
 The batch framework in [`benchmark/`](benchmark/) runs the same comparison offline and supports additional models and samples. The suggested 30-sample plan intentionally emphasizes English-Igbo, English-Pidgin and three-language speech; it is not hardcoded.
 
