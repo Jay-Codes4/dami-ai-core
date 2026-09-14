@@ -65,8 +65,13 @@ function safeTokenMatch(received: string, expected: string) {
 }
 
 function benchmarkEnabled() {
+  // In production, a configured benchmark access token is sufficient to enable
+  // the protected runner. This avoids a second hidden feature flag leaving the
+  // UI disabled even when the secure admin token is correctly configured.
   return (
-    process.env["NODE_ENV"] !== "production" || process.env["DAMI_BENCHMARK_ENABLED"] === "true"
+    process.env["NODE_ENV"] !== "production" ||
+    process.env["DAMI_BENCHMARK_ENABLED"] === "true" ||
+    Boolean(configuredToken())
   );
 }
 
