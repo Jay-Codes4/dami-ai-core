@@ -313,7 +313,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     const final = socketReady
       ? await Promise.race([
           finalPromise,
-          new Promise<string>((resolve) => setTimeout(() => resolve(committedTranscript), 1400)),
+          new Promise<string>((resolve) => setTimeout(() => resolve(committedTranscript), 3000)),
         ])
       : "";
     try {
@@ -387,7 +387,7 @@ async function saharaFinal(
     }
   }
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 8000);
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
   let response: Response;
   try {
     response = await fetch("/voice/stt", {
@@ -444,14 +444,26 @@ export async function transcribeSamples(
       engine: "sahara-stt",
       language: options.language,
     };
-  // A partial hypothesis is useful only for immediate UI feedback. It can omit
-  // the end of a code-switched question, so the legal query must use a committed
-  // live transcript or the completed file-transcription request.
+  // Prefer a committed Sahara result. If the file retry fails but the live
+  // Sahara websocket already produced a usable hypothesis, keep that Sahara
+  // transcript instead of falsely labelling it as Windows/browser speech.
+  // Desktop wake capture does not set capture.partialTranscript, so its native
+  // fallback remains correctly identified as windows-speech below.
+  const liveSaharaTranscript = capture.partialTranscript?.trim();
   try {
     return await saharaFinal(capture, options);
   } catch (error) {
-    // Native Windows recognition is a last-resort resilience path for wake
-    // commands. Sahara is still attempted first, but Dami never strands a turn.
+    if (liveSaharaTranscript)
+      return {
+        text: liveSaharaTranscript,
+        durationMs: capture.durationMs,
+        requestId: null,
+        engine: "sahara-stt",
+        language: options.language,
+      };
+
+    // Native Windows recognition is a last-resort resilience path for desktop
+    // wake commands only. Sahara is still attempted first.
     const fallback = options.browserTranscript?.trim();
     if (fallback)
       return {
