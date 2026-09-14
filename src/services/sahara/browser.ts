@@ -43,6 +43,11 @@ export const warmSaharaVoice = createClientOnlyFn(
   },
 );
 
+export const resetSaharaVoiceWarmup = createClientOnlyFn(async (): Promise<void> => {
+  const mod = await import("./tts.client");
+  mod.resetSaharaVoiceWarmup();
+});
+
 export const warmVoiceGateway = createClientOnlyFn(async (): Promise<void> => {
   const mod = await import("./stt.client");
   await mod.warmVoiceGateway();

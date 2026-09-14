@@ -27,6 +27,7 @@ type WarmTtsSocket = {
   ready: Promise<void>;
   createdAt: number;
   claimed: boolean;
+  sessionReady: boolean;
 };
 let warmTtsSocket: WarmTtsSocket | null = null;
 
@@ -68,15 +69,33 @@ export function warmSaharaVoice(requested: VoiceOptions) {
   const socket = new WebSocket(buildTtsUrl(o));
   let resolveReady!: () => void;
   const ready = new Promise<void>((resolve) => (resolveReady = resolve));
-  const warm: WarmTtsSocket = { key, socket, ready, createdAt: now, claimed: false };
+  const warm: WarmTtsSocket = {
+    key,
+    socket,
+    ready,
+    createdAt: now,
+    claimed: false,
+    sessionReady: false,
+  };
   warmTtsSocket = warm;
 
   const finishReady = () => resolveReady();
-  const timer = window.setTimeout(finishReady, 4500);
+  const timer = window.setTimeout(() => {
+    // An OPEN websocket is not usable until Sahara confirms SESSION_CREATED.
+    // Discard half-open warmups instead of letting the next turn claim them.
+    if (!warm.sessionReady) {
+      try {
+        socket.close();
+      } catch {}
+      if (warmTtsSocket === warm) warmTtsSocket = null;
+    }
+    finishReady();
+  }, 4500);
   socket.addEventListener("message", (event) => {
     try {
       const message = JSON.parse(String(event.data)) as { message_type?: string };
       if (message.message_type === "SESSION_CREATED") {
+        warm.sessionReady = true;
         window.clearTimeout(timer);
         finishReady();
       }
@@ -101,6 +120,7 @@ function takeWarmTtsSocket(o: VoiceOptions) {
     !warm ||
     warm.key !== key ||
     warm.claimed ||
+    !warm.sessionReady ||
     warm.socket.readyState !== WebSocket.OPEN ||
     Date.now() - warm.createdAt >= 30_000
   )
@@ -108,6 +128,19 @@ function takeWarmTtsSocket(o: VoiceOptions) {
   warm.claimed = true;
   if (warmTtsSocket === warm) warmTtsSocket = null;
   return warm.socket;
+}
+
+export function resetSaharaVoiceWarmup() {
+  const warm = warmTtsSocket;
+  warmTtsSocket = null;
+  if (!warm) return;
+  try {
+    if (
+      warm.socket.readyState === WebSocket.OPEN ||
+      warm.socket.readyState === WebSocket.CONNECTING
+    )
+      warm.socket.close();
+  } catch {}
 }
 
 function getSharedAudio() {
@@ -696,7 +729,9 @@ export async function speak(text: string, requested: VoiceOptions): Promise<Spee
   const generated = await saharaHttpSpeech(clean, o).catch(() => null);
   if (generated) return generated;
 
-  // A failed African-voice request should fail visibly/quietly rather than
-  // speaking in the wrong voice. The next interaction can retry Sahara.
-  return { stop() {} };
+  // Do not return a fake "successful" silent handle. Surface the failure so
+  // the UI can keep the written answer and offer Read Aloud/retry cleanly.
+  throw new Error(
+    "Dami's voice session could not start. The written answer is ready; tap Read Aloud to retry.",
+  );
 }
