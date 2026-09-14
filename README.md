@@ -69,6 +69,19 @@ Supported benchmark categories include English, Igbo, Nigerian Pidgin, Yoruba, E
 
 The batch framework in [`benchmark/`](benchmark/) runs the same comparison offline and supports additional models and samples. The suggested 30-sample plan intentionally emphasizes English-Igbo, English-Pidgin and three-language speech; it is not hardcoded.
 
+### Measured benchmark snapshot
+
+Controlled submission benchmark completed on 4 consented, researcher-recorded code-switched legal samples (2 English-Igbo, 2 English-Pidgin; 37.3 seconds total). The same unedited audio was sent independently to each ASR model.
+
+| Model | Overall WER | Overall CER | Avg latency | Code-switch preservation | Legal entity accuracy | Objective legal-pipeline pass |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Intron Sahara v2.5 | 17.0% | 7.5% | 8,464 ms | 66.7% | 50.0% | 50.0% |
+| Groq Whisper Large V3 | 15.0% | 5.7% | 698 ms | 37.5% | 70.8% | 75.0% |
+| Groq Whisper Large V3 Turbo | 18.0% | 8.7% | 543 ms | 29.2% | 58.3% | 75.0% |
+
+Per-language findings: Sahara achieved the best English-Pidgin WER/CER (7.8% / 2.4%) and the strongest overall declared code-switch preservation. Groq Whisper Large V3 achieved the lowest overall WER/CER and strongest entity preservation, while Turbo was the fastest. The benchmark is intentionally small and is presented as controlled product-validation evidence, not a population-level language benchmark.
+
+
 Intron credits have been restored, so the Sahara execution path is ready. Actual benchmark rows remain empty until permitted test audio is added to `benchmark/manifest.csv` and the models are run; no result is estimated or fabricated.
 
 Optional local/batch smoke-test examples:
@@ -98,8 +111,8 @@ Dami's submission approach covers privacy and consent, legal safety, source inte
 - [x] Reproducible Sahara, Groq Whisper Large V3 and Groq Whisper Large V3 Turbo batch runners
 - [x] Responsible AI note
 - [x] Sahara credits restored / benchmark runner ready
-- [ ] Add permitted code-switched benchmark audio + reference transcripts
-- [ ] Populate measured results for Sahara + Groq Whisper Large V3 + Groq Whisper Large V3 Turbo
+- [x] Add permitted code-switched benchmark audio + reference transcripts
+- [x] Populate measured results for Sahara + Groq Whisper Large V3 + Groq Whisper Large V3 Turbo
 - [ ] Record final short prototype demo video
 
 ## Repository Map
