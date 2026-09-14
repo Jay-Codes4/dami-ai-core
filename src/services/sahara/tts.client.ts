@@ -340,7 +340,9 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
   // Later chunks may reject before playback reaches them. Attach a handler now
   // so a gateway failure never becomes an unhandled browser rejection.
   for (const deferred of deferreds) void deferred.promise.catch(() => undefined);
-  const socket = takeWarmTtsSocket(o) ?? new WebSocket(url),
+  const warmSocket = takeWarmTtsSocket(o),
+    socket = warmSocket ?? new WebSocket(url),
+    socketWasWarm = Boolean(warmSocket),
     terminalTypes = new Set([
       "AUTHENTICATION_ERROR",
       "RESOURCE_EXHAUSTED",
@@ -398,7 +400,13 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       ),
     );
   };
-  socket.addEventListener("open", sendFirstChunk, { once: true });
+  // A newly-created websocket must wait for Sahara SESSION_CREATED before text
+  // is sent. A claimed prewarmed socket has already completed that handshake.
+  if (socketWasWarm) {
+    // send after listeners are attached below
+  } else {
+    socket.addEventListener("open", () => undefined, { once: true });
+  }
   socket.addEventListener("message", (event) => {
     let message: {
       message_type?: string;
@@ -416,6 +424,10 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       return;
     }
     const type = message.message_type || "";
+    if (type === "SESSION_CREATED") {
+      sendFirstChunk();
+      return;
+    }
     if (terminalTypes.has(type)) {
       fail(message.message || "Sahara streaming voice is unavailable.");
       return;
@@ -454,9 +466,9 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       fail("Sahara closed the voice session early.");
   });
 
-  // Prewarmed sockets are already OPEN. Attach all ACK/audio listeners before
-  // sending the first text chunk so Sahara's immediate ACK cannot be missed.
-  sendFirstChunk();
+  // A prewarmed socket is already authenticated/ready. Attach all ACK/audio
+  // listeners first, then hand it the answer immediately.
+  if (socketWasWarm) sendFirstChunk();
 
   let firstBlob: Blob;
   let startTimer = 0;
