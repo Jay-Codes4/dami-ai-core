@@ -399,10 +399,6 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     );
   };
   socket.addEventListener("open", sendFirstChunk, { once: true });
-  // A prewarmed socket is already OPEN, so its open event happened before this
-  // turn claimed it. Prioritise only the first short chunk initially so Sahara
-  // can synthesize audible speech as fast as possible.
-  sendFirstChunk();
   socket.addEventListener("message", (event) => {
     let message: {
       message_type?: string;
@@ -457,6 +453,10 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     if (!committed && deferreds.some((item) => !item.settled))
       fail("Sahara closed the voice session early.");
   });
+
+  // Prewarmed sockets are already OPEN. Attach all ACK/audio listeners before
+  // sending the first text chunk so Sahara's immediate ACK cannot be missed.
+  sendFirstChunk();
 
   let firstBlob: Blob;
   let startTimer = 0;
@@ -534,13 +534,9 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       for (index = 1; index < deferreds.length && !stopped; index++)
         await playBlob(await deferreds[index]!.promise);
     } catch {
-      if (!stopped) {
-        const remaining = chunks.slice(index).join(" ") || clean,
-          fallback = nativeDesktopSpeech(remaining) ?? browserSpeech(remaining, o);
-        await fallback.started;
-        markStarted();
-        await fallback.ended;
-      }
+      // Preserve Dami's configured African voice identity. Never switch
+      // mid-answer to a generic OS/browser voice.
+      if (!stopped) markStarted();
     } finally {
       if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
         socket.close();
