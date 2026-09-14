@@ -7,6 +7,7 @@ import { newId, storage } from "@/lib/storage";
 import { buildVoiceTranscript, MAX_LEGAL_QUERY_CHARACTERS } from "@/lib/transcript";
 import { voiceDiagnostic } from "@/lib/voiceDiagnostics";
 import {
+  prepareAudioPlayback,
   speak,
   startRecording,
   transcribeSamples,
@@ -416,6 +417,9 @@ export function useVoiceSession() {
     const settings = storage.getSettings(),
       language = getDamiLanguage(settings.speechLanguage);
     try {
+      // Prime mobile audio playback during the user's activation gesture so
+      // Dami can speak automatically after the async research/TTS round trip.
+      void prepareAudioPlayback();
       const recorder = await startRecording(
         settings.maxRecordingSeconds,
         language.saharaSttLanguage,

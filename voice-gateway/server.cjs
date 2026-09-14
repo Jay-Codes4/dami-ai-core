@@ -208,7 +208,9 @@ ttsWss.on("connection", (client, request) => {
 
   const upstream = new WebSocket(upstreamUrl, {
     headers: { Authorization: `Bearer ${INTRON_API_KEY}` },
-    perMessageDeflate: false,
+    // Allow websocket extension negotiation for TTS. Sahara can return
+    // compressed frames; disabling negotiation causes "RSV1 must be clear"
+    // and silently kills mobile voice playback.
     followRedirects: true,
   });
   let sessionReady = false;
