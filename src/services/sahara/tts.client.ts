@@ -18,9 +18,42 @@ const VOICE_TTS_WS_URL = (
   "wss://dami-ai-core-1.onrender.com/stt"
 ).replace(/\/stt(?:\?.*)?$/, "/tts");
 const STREAM_START_TIMEOUT_MS = 4500;
+let sharedAudio: HTMLAudioElement | null = null;
+
+function getSharedAudio() {
+  if (typeof window === "undefined") return null;
+  if (!sharedAudio) {
+    sharedAudio = new Audio();
+    sharedAudio.preload = "auto";
+    sharedAudio.playsInline = true;
+  }
+  return sharedAudio;
+}
+
 export async function prepareAudioPlayback() {
-  if (typeof window !== "undefined" && "speechSynthesis" in window)
-    window.speechSynthesis.getVoices();
+  if (typeof window === "undefined") return;
+  if ("speechSynthesis" in window) window.speechSynthesis.getVoices();
+
+  // Prime one reusable media element while we still have the user's tap/click.
+  // Mobile browsers can otherwise reject Dami's later audio.play() after the
+  // network/research/TTS delay because it is no longer inside a user gesture.
+  const audio = getSharedAudio();
+  if (!audio) return;
+  const silentWav =
+    "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+  try {
+    audio.src = silentWav;
+    audio.volume = 0.001;
+    await audio.play();
+    audio.pause();
+    audio.currentTime = 0;
+  } catch {
+    // Priming is best-effort. Sahara/browser fallbacks still run normally.
+  } finally {
+    audio.volume = 1;
+    audio.removeAttribute("src");
+    audio.load();
+  }
 }
 function cleanSpeechText(text: string) {
   return text
@@ -363,8 +396,10 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     },
     playBlob = async (blob: Blob) => {
       const objectUrl = URL.createObjectURL(blob),
-        audio = new Audio(objectUrl);
+        audio = getSharedAudio() ?? new Audio();
       current = audio;
+      audio.pause();
+      audio.src = objectUrl;
       audio.preload = "auto";
       audio.playbackRate = 1.04;
       try {
@@ -377,6 +412,8 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
           });
         });
       } finally {
+        audio.removeAttribute("src");
+        audio.load();
         URL.revokeObjectURL(objectUrl);
       }
     };
@@ -427,10 +464,112 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
     ended,
   };
 }
+async function saharaHttpSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle | null> {
+  const clean = cleanSpeechText(text);
+  if (!clean) return null;
+  try {
+    const response = await fetch("/voice/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: clean,
+        accent: o.accent,
+        gender: "female",
+        language: o.language,
+      }),
+    });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    if (!blob.size) return null;
+
+    const audio = getSharedAudio() ?? new Audio();
+    const objectUrl = URL.createObjectURL(blob);
+    let stopped = false,
+      paused = false,
+      settled = false,
+      startedDone = false;
+    let resolveStarted!: () => void, resolveEnded!: () => void;
+    const started = new Promise<void>((resolve) => (resolveStarted = resolve)),
+      ended = new Promise<void>((resolve) => (resolveEnded = resolve)),
+      markStarted = () => {
+        if (!startedDone) {
+          startedDone = true;
+          resolveStarted();
+        }
+      },
+      finish = () => {
+        markStarted();
+        if (!settled) {
+          settled = true;
+          resolveEnded();
+        }
+      };
+
+    audio.pause();
+    audio.src = objectUrl;
+    audio.preload = "auto";
+    audio.playbackRate = 1.04;
+    audio.addEventListener("play", markStarted, { once: true });
+    audio.addEventListener("ended", finish, { once: true });
+    audio.addEventListener("error", finish, { once: true });
+
+    try {
+      await audio.play();
+    } catch {
+      audio.removeAttribute("src");
+      audio.load();
+      URL.revokeObjectURL(objectUrl);
+      return null;
+    }
+
+    void ended.finally(() => {
+      if (!stopped) {
+        audio.removeAttribute("src");
+        audio.load();
+      }
+      URL.revokeObjectURL(objectUrl);
+    });
+
+    return {
+      stop() {
+        stopped = true;
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+        finish();
+      },
+      pause() {
+        if (!settled && !paused) {
+          audio.pause();
+          paused = true;
+        }
+      },
+      resume() {
+        if (!settled && paused) {
+          paused = false;
+          void audio.play();
+        }
+      },
+      isPaused: () => paused,
+      started,
+      ended,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function speak(text: string, requested: VoiceOptions): Promise<SpeechHandle> {
   const clean = cleanSpeechText(text),
     o = normaliseVoice(requested);
   const sahara = await saharaSpeech(clean, o).catch(() => null);
   if (sahara) return sahara;
+
+  // Keep Dami's African female Sahara voice as the first fallback as well.
+  // This HTTP Generate path is slower than streaming but is much more robust on
+  // mobile networks and protects against provider websocket framing failures.
+  const generated = await saharaHttpSpeech(clean, o);
+  if (generated) return generated;
+
   return nativeDesktopSpeech(clean) ?? browserSpeech(clean, o);
 }
