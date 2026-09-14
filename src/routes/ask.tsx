@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useVoiceSession } from "@/hooks/useVoiceSession";
+import { resetSaharaVoiceWarmup, warmSaharaVoice } from "@/services/sahara/browser";
 import { DAMI_LANGUAGES, getDamiLanguage, type DamiLanguageCode } from "@/lib/languages";
 import { storage } from "@/lib/storage";
 export const Route = createFileRoute("/ask")({ component: AskPage });
@@ -24,6 +25,8 @@ function AskPage() {
   const changeLanguage = (value: DamiLanguageCode) => {
     const language = getDamiLanguage(value),
       current = storage.getSettings();
+    voice.stopSpeaking();
+    void resetSaharaVoiceWarmup();
     storage.setSettings({
       ...current,
       speechLanguage: value,
@@ -31,6 +34,15 @@ function AskPage() {
       voiceAccent: language.preferredAccent,
     });
     setLanguageCode(value);
+    // Prepare a fresh Sahara voice session for the newly selected language so
+    // the next answer does not inherit a stale socket/accent from the last turn.
+    if (current.speakAnswers) {
+      void warmSaharaVoice({
+        accent: language.preferredAccent,
+        gender: current.voiceGender,
+        language: language.ttsLanguage,
+      });
+    }
   };
   const activateAvatar = async () => {
     if (avatarActivationRef.current || listening || busy) return;
