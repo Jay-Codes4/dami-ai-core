@@ -280,7 +280,7 @@ function splitForSahara(text: string) {
   let current = "";
   for (const sourceWord of words) {
     let word = sourceWord;
-    let limit = chunks.length === 0 ? 32 : 96;
+    let limit = chunks.length === 0 ? 64 : 96;
     while (word.length > limit) {
       if (current) {
         chunks.push(current);
