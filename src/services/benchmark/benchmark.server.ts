@@ -22,21 +22,25 @@ const Input = z.object({
   languageCategory: z.enum(BENCHMARK_LANGUAGE_CATEGORIES),
 });
 
-const SAHARA_LANGUAGE: Record<BenchmarkLanguageCategory, "en" | "ig" | "pcm"> = {
+const SAHARA_LANGUAGE: Record<BenchmarkLanguageCategory, "en" | "ig" | "pcm" | "yo"> = {
   English: "en",
   Igbo: "ig",
   "Nigerian Pidgin": "pcm",
+  Yoruba: "yo",
   "English + Igbo": "ig",
+  "English + Yoruba": "yo",
   "English + Pidgin": "pcm",
   "Igbo + Pidgin": "ig",
   "English + Igbo + Pidgin": "ig",
 };
 
-const MMS_ADAPTER: Record<BenchmarkLanguageCategory, "eng" | "ibo" | "pcm"> = {
+const MMS_ADAPTER: Record<BenchmarkLanguageCategory, "eng" | "ibo" | "pcm" | "yor"> = {
   English: "eng",
   Igbo: "ibo",
   "Nigerian Pidgin": "pcm",
+  Yoruba: "yor",
   "English + Igbo": "ibo",
+  "English + Yoruba": "yor",
   "English + Pidgin": "pcm",
   "Igbo + Pidgin": "ibo",
   "English + Igbo + Pidgin": "ibo",
