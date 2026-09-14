@@ -61,8 +61,8 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
   },
   {
     code: "ig",
-    label: "Igbo ↔ English",
-    shortLabel: "Igbo-English",
+    label: "English ↔ Igbo",
+    shortLabel: "English-Igbo",
     codeSwitched: true,
     saharaSttLanguage: "ig",
     expectedLanguages: ["Igbo", "English"],
@@ -71,8 +71,8 @@ export const DAMI_LANGUAGES: DamiLanguage[] = [
   },
   {
     code: "pcm",
-    label: "Nigerian Pidgin ↔ English",
-    shortLabel: "Pidgin-English",
+    label: "English ↔ Nigerian Pidgin",
+    shortLabel: "English-Pidgin",
     codeSwitched: true,
     saharaSttLanguage: "pcm",
     expectedLanguages: ["Nigerian Pidgin", "English"],
