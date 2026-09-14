@@ -13,6 +13,7 @@ import { research } from "@/services/agent/research.server";
 import { SAHARA_STT_SYNC_URL } from "@/services/sahara/sahara.server";
 
 const OPENAI_TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions";
+const GROQ_TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 const Input = z.object({
   testId: z.string().trim().min(1).max(80),
@@ -77,7 +78,7 @@ export function benchmarkStatus() {
     providers: {
       sahara: Boolean(process.env["INTRON_API_KEY"]),
       whisper: Boolean(process.env["OPENAI_API_KEY"]),
-      model3: Boolean(process.env["DAMI_BENCHMARK_MODEL3_URL"]),
+      model3: Boolean(process.env["GROQ_API_KEY"]),
       legalAgent: Boolean(process.env["GROQ_API_KEY"]),
     },
   };
@@ -234,42 +235,38 @@ async function runWhisper(input: AudioInput): Promise<BenchmarkAsrResult> {
 }
 
 async function runModel3(input: AudioInput): Promise<BenchmarkAsrResult> {
-  const model = process.env["DAMI_BENCHMARK_MODEL3_NAME"] ?? "Meta MMS 1B All";
-  const adapter = MMS_ADAPTER[input.category];
-  const configuration = `Meta MMS endpoint; language adapter=${adapter}`;
-  const endpoint = process.env["DAMI_BENCHMARK_MODEL3_URL"];
-  if (!endpoint)
+  const modelName = process.env["DAMI_BENCHMARK_MODEL3_NAME"] ?? "whisper-large-v3-turbo";
+  const model = `Groq ${modelName}`;
+  const configuration = "Groq-hosted Whisper Large V3 Turbo; transcription; no translation";
+  const key = process.env["GROQ_API_KEY"];
+  if (!key)
     return errorResult(
       "model-3",
       model,
       "not-configured",
       configuration,
-      "DAMI_BENCHMARK_MODEL3_URL is not configured. The local batch runner remains available.",
+      "GROQ_API_KEY is not configured.",
     );
-  const headers: Record<string, string> = {
-    "Content-Type": input.mime,
-    "X-Dami-Language-Adapter": adapter,
-  };
-  const token = process.env["HF_TOKEN"];
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const form = new FormData();
+  form.set("file", audioBlob(input), input.name);
+  form.set("model", modelName);
+  form.set("response_format", "json");
   const started = performance.now();
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(GROQ_TRANSCRIPTION_URL, {
       method: "POST",
       signal: AbortSignal.timeout(150_000),
-      headers,
-      body: input.bytes as unknown as BodyInit,
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
     });
-    const payload = (await response.json().catch(() => ({}))) as
-      | { text?: string; generated_text?: string; error?: string }
-      | Array<{ text?: string; generated_text?: string }>;
-    const first = Array.isArray(payload) ? payload[0] : payload;
+    const payload = (await response.json().catch(() => ({}))) as {
+      text?: string;
+      error?: { message?: string };
+    };
     if (!response.ok)
-      throw new Error(
-        (!Array.isArray(payload) && payload.error) || `Model 3 HTTP ${response.status}`,
-      );
-    const transcript = (first?.text ?? first?.generated_text ?? "").trim();
-    if (!transcript) throw new Error("Meta MMS returned no transcript.");
+      throw new Error(payload.error?.message ?? `Groq STT HTTP ${response.status}`);
+    const transcript = (payload.text ?? "").trim();
+    if (!transcript) throw new Error("Groq Whisper returned no transcript.");
     return {
       modelId: "model-3",
       model,
@@ -285,7 +282,7 @@ async function runModel3(input: AudioInput): Promise<BenchmarkAsrResult> {
       model,
       "error",
       configuration,
-      error instanceof Error ? error.message : "Meta MMS transcription failed.",
+      error instanceof Error ? error.message : "Groq Whisper transcription failed.",
     );
   }
 }
