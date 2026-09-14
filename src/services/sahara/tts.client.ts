@@ -279,7 +279,7 @@ function splitForSahara(text: string) {
   let current = "";
   for (const sourceWord of words) {
     let word = sourceWord;
-    let limit = chunks.length === 0 ? 56 : 96;
+    let limit = chunks.length === 0 ? 32 : 96;
     while (word.length > limit) {
       if (current) {
         chunks.push(current);
@@ -379,21 +379,29 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
       socket.send(JSON.stringify({ message_type: "FETCH_AUDIO_CHUNK", chunk_id: chunkId }));
     };
 
-  let chunksSent = false;
-  const sendChunks = () => {
-    if (chunksSent || socket.readyState !== WebSocket.OPEN) return;
-    chunksSent = true;
-    chunks.forEach((chunk, index) =>
+  let firstChunkSent = false,
+    remainingChunksSent = false;
+  const sendFirstChunk = () => {
+    if (firstChunkSent || socket.readyState !== WebSocket.OPEN) return;
+    firstChunkSent = true;
+    socket.send(
+      JSON.stringify({ message_type: "INPUT_TEXT_CHUNK", text: chunks[0], ack_id: 1 }),
+    );
+  };
+  const sendRemainingChunks = () => {
+    if (remainingChunksSent || socket.readyState !== WebSocket.OPEN) return;
+    remainingChunksSent = true;
+    chunks.slice(1).forEach((chunk, index) =>
       socket.send(
-        JSON.stringify({ message_type: "INPUT_TEXT_CHUNK", text: chunk, ack_id: index + 1 }),
+        JSON.stringify({ message_type: "INPUT_TEXT_CHUNK", text: chunk, ack_id: index + 2 }),
       ),
     );
   };
-  socket.addEventListener("open", sendChunks, { once: true });
+  socket.addEventListener("open", sendFirstChunk, { once: true });
   // A prewarmed socket is already OPEN, so its open event happened before this
-  // turn claimed it. Send immediately instead of waiting for an event that
-  // will never fire.
-  sendChunks();
+  // turn claimed it. Prioritise only the first short chunk initially so Sahara
+  // can synthesize audible speech as fast as possible.
+  sendFirstChunk();
   socket.addEventListener("message", (event) => {
     let message: {
       message_type?: string;
@@ -468,6 +476,10 @@ async function saharaSpeech(text: string, o: VoiceOptions): Promise<SpeechHandle
   } finally {
     window.clearTimeout(startTimer);
   }
+
+  // The first audible chunk is ready. Queue the remaining text now so the next
+  // chunks synthesize while the user is already hearing Dami speak.
+  sendRemainingChunks();
 
   let stopped = false,
     paused = false,
