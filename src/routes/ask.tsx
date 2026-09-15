@@ -147,27 +147,14 @@ function AskPage() {
             <div className="border bg-card p-4 sm:p-5" aria-live="polite">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                  {voice.transcript ? "Original voice transcript" : "Live transcript"}
+                  {voice.transcript ? "Voice transcript" : "Live transcript"}
                 </p>
-                {voice.transcript && (
-                  <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                    {voice.transcript.engine === "sahara-stt"
-                      ? "Sahara STT"
-                      : "Resilience transcript"}
-                  </span>
-                )}
               </div>
               <p className="min-h-12 whitespace-pre-wrap text-base leading-7">
                 {voice.transcript?.originalTranscript ||
                   voice.partial ||
                   "Start speaking and your words will appear here…"}
               </p>
-              {voice.transcript?.engine !== "sahara-stt" && voice.transcript && (
-                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                  Sahara was unavailable for this turn, so Dami used the Windows resilience
-                  transcript. Retry before using this turn as benchmark evidence.
-                </p>
-              )}
             </div>
           )}
           {voice.stage === "error" && voice.error && (
