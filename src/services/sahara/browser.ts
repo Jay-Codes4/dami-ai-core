@@ -18,7 +18,7 @@ export interface TranscriptionResult {
   text: string;
   durationMs: number;
   requestId: string | null;
-  engine: "sahara-stt" | "windows-speech" | "browser-speech";
+  engine: "sahara-stt" | "groq-whisper-large-v3" | "windows-speech" | "browser-speech";
   language: string;
 }
 
