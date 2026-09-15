@@ -39,7 +39,7 @@ export const askDami = createServerFn({ method: "POST" })
       if (data.context?.selectedLanguage === "ig" || data.context?.selectedLanguage === "pcm") {
         query = `${query}\n\nJurisdiction: Nigeria. Prioritize Nigerian law and Nigerian official/primary legal authorities.`;
       }
-      const result = await research(query);
+      const result = await research(query, { selectedLanguage: data.context?.selectedLanguage });
       if (!data.context) return result;
       return {
         ...result,
