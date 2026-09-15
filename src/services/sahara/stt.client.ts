@@ -181,7 +181,16 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
       browserRecognizer = new SpeechRecognitionCtor();
       browserRecognizer.continuous = true;
       browserRecognizer.interimResults = true;
-      browserRecognizer.lang = language === "pcm" ? "en-NG" : language || "en-NG";
+      // Browser resilience must stay usable when Sahara is out of balance. Web Speech
+      // does not reliably support Igbo/Pidgin locale tags, so code-switch modes
+      // use Nigerian English recognition while preserving the selected mode in
+      // Dami's transcript/research context.
+      browserRecognizer.lang =
+        language === "ig" || language === "pcm" || language === "ak" || language === "yo"
+          ? "en-NG"
+          : language === "sw"
+            ? "sw-KE"
+            : "en-NG";
       browserRecognizer.onresult = (event: any) => {
         let combined = "";
         for (let i = 0; i < event.results.length; i++)
