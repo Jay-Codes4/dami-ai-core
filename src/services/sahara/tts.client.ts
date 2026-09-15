@@ -851,21 +851,20 @@ export async function speak(text: string, requested: VoiceOptions): Promise<Spee
   const clean = cleanSpeechText(text),
     o = normaliseVoice(requested);
 
-  // Use fresh bounded Sahara Generate requests as the primary playback path.
-  // This avoids the intermittent upstream websocket framing failure observed
-  // after the first recording while keeping the same Sahara African voice.
+  // Dami Voice is the reliable primary playback voice. Sahara remains a core
+  // speech provider for Dami and is still used for competition transcription,
+  // benchmarking and as the first neural resilience path when Dami Voice is
+  // unavailable. Keep provider attribution explicit in benchmark evidence.
+  const damiVoice = await edgeAfricanFemaleSpeech(clean).catch(() => null);
+  if (damiVoice) return damiVoice;
+
+  // Sahara Generate remains the first provider fallback.
   const generated = await saharaHttpSpeech(clean, o).catch(() => null);
   if (generated) return generated;
 
-  // Keep streaming as a secondary Sahara resilience path.
+  // Keep Sahara streaming as the secondary provider resilience path.
   const sahara = await saharaSpeech(clean, o).catch(() => null);
   if (sahara) return sahara;
-
-  // Zero-credit neural fallback for the deadline demo. Sahara remains primary.
-  // Ezinne is Microsoft's Nigerian English female neural voice and requires no
-  // Dami API key through the Edge Read Aloud fallback service.
-  const edgeFemale = await edgeAfricanFemaleSpeech(clean).catch(() => null);
-  if (edgeFemale) return edgeFemale;
 
   // Device speech is now only a last-resort fallback after both neural paths.
   try {
