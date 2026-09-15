@@ -11,7 +11,13 @@ import type { ResearchAnswer } from "@/lib/types";
 const TranscriptContextInput = z.object({
   originalTranscript: z.string().min(1).max(8000),
   normalizedRetrievalQuery: z.string().min(1).max(8000),
-  transcriptEngine: z.enum(["sahara-stt", "windows-speech", "browser-speech", "typed"]),
+  transcriptEngine: z.enum([
+    "sahara-stt",
+    "groq-whisper-large-v3",
+    "windows-speech",
+    "browser-speech",
+    "typed",
+  ]),
   selectedLanguage: z.enum(["en", "ig", "pcm"]),
   expectedLanguages: z.array(z.string().min(1).max(40)).max(3),
   codeSwitchedMode: z.boolean(),
