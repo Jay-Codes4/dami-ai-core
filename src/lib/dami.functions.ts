@@ -32,7 +32,13 @@ export const askDami = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ResearchAnswer> => {
     const { research, ResearchError } = await import("@/services/agent/research.server");
     try {
-      const query = data.context?.normalizedRetrievalQuery ?? data.question;
+      let query = data.context?.normalizedRetrievalQuery ?? data.question;
+      // Language choice is also a jurisdiction signal for the Nigeria-specific
+      // demo modes. Keep the user's wording, but constrain retrieval so Pidgin
+      // and Igbo questions do not drift into unrelated countries.
+      if (data.context?.selectedLanguage === "ig" || data.context?.selectedLanguage === "pcm") {
+        query = `${query}\n\nJurisdiction: Nigeria. Prioritize Nigerian law and Nigerian official/primary legal authorities.`;
+      }
       const result = await research(query);
       if (!data.context) return result;
       return {
