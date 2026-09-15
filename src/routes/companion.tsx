@@ -148,8 +148,22 @@ function Companion() {
         if (command) {
           void playListeningCue();
           window.setTimeout(() => void playListeningEndCue(), 260);
-          await askWakeCapture(wake?.audioBase64 ?? "", command);
+          // Desktop wake-listener already produced a usable Windows transcript.
+          // Do not send its audio back through Sahara when credits/quota are
+          // unavailable; use the native transcript directly for this Desktop
+          // turn. Web/Sahara transcription and benchmark paths are untouched.
+          await askWakeCapture("", command);
           return;
+        }
+        // If the wake phrase contained no command, use Windows' native
+        // recognizer for the follow-up question on Desktop. This keeps Desktop
+        // demo input independent of Sahara quota while leaving web STT intact.
+        if (bridge?.isDesktop && bridge.localTranscribe) {
+          const localCommand = (await bridge.localTranscribe()).trim();
+          if (localCommand) {
+            await askWakeCapture("", localCommand);
+            return;
+          }
         }
         // Open the microphone immediately. The rising cue and visible listening
         // state acknowledge a wake phrase without delaying capture or recording
