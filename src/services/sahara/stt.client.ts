@@ -282,14 +282,24 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     if (!stopped && !cancelled) finalResolve?.(committedTranscript);
   };
 
-  const teardown = () => {
+  const stopBrowserRecognizer = async () => {
+    if (!browserRecognizer) return;
     try {
-      // abort() freezes the best hypothesis synchronously; stop() can emit its
-      // final result after we have already built the AudioCapture object.
-      browserRecognizer?.abort();
+      // Ask recognition to finalize rather than aborting it. Mobile Chrome can
+      // deliver the useful final hypothesis only from the result/end events
+      // after stop(), so abort() was discarding the quota fallback transcript.
+      browserRecognizer.stop();
+      await new Promise<void>((resolve) => {
+        const done = () => resolve();
+        browserRecognizer.addEventListener?.("end", done, { once: true });
+        window.setTimeout(resolve, 650);
+      });
     } catch {
       // Browser recognition is best-effort resilience only.
     }
+  };
+
+  const teardown = () => {
     processor.onaudioprocess = null;
     try {
       processor.disconnect();
@@ -337,6 +347,10 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     if (stopped) throw new MicrophoneError("That recording has already ended.", "empty");
     stopped = true;
     clearTimeout(timer);
+    // Preserve the browser recognizer's final words before building capture.
+    // This is essential when Sahara is unavailable because browserTranscript
+    // is the immediate zero-credit STT resilience path.
+    await stopBrowserRecognizer();
     teardown();
 
     const socketReady = await waitForSocket();
@@ -385,6 +399,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
       cancelled = true;
       stopped = true;
       clearTimeout(timer);
+      try { browserRecognizer?.abort(); } catch {}
       teardown();
       try {
         ws.close(1000);
