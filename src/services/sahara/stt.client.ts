@@ -29,7 +29,7 @@ export interface TranscriptionResult {
   text: string;
   durationMs: number;
   requestId: string | null;
-  engine: "sahara-stt" | "windows-speech" | "browser-speech";
+  engine: "sahara-stt" | "groq-whisper-large-v3" | "windows-speech" | "browser-speech";
   language: string;
 }
 
@@ -471,7 +471,7 @@ async function saharaFinal(
     durationMs?: number;
     requestId?: string | null;
     error?: string;
-    engine?: "sahara-stt";
+    engine?: "sahara-stt" | "groq-whisper-large-v3";
     language?: string;
   } | null = null;
   try {
@@ -484,7 +484,7 @@ async function saharaFinal(
       text: payload.text.trim(),
       durationMs: payload.durationMs ?? 0,
       requestId: payload.requestId ?? null,
-      engine: "sahara-stt" as const,
+      engine: payload.engine ?? ("sahara-stt" as const),
       language: payload.language ?? options.language,
     };
   throw new Error(
