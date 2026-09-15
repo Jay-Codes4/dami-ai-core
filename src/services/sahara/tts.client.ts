@@ -786,9 +786,19 @@ export async function speak(text: string, requested: VoiceOptions): Promise<Spee
   const generated = await saharaHttpSpeech(clean, o).catch(() => null);
   if (generated) return generated;
 
-  // Keep streaming as a secondary resilience path only.
+  // Keep streaming as a secondary Sahara resilience path.
   const sahara = await saharaSpeech(clean, o).catch(() => null);
   if (sahara) return sahara;
+
+  // Zero-credit demo fallback. This is deliberately separate from Sahara:
+  // prefer a locally installed African/Nigerian female browser voice, then the
+  // desktop bridge when available. Never label this fallback as Sahara.
+  try {
+    return browserSpeech(clean, o);
+  } catch {}
+
+  const desktop = nativeDesktopSpeech(clean);
+  if (desktop) return desktop;
 
   throw new Error(
     "Dami's voice session could not start. The written answer is ready; tap Read Aloud to retry.",
