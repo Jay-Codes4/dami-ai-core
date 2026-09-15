@@ -213,9 +213,21 @@ function browserSpeech(text: string, o: VoiceOptions): SpeechHandle {
       /female|woman|aria|jenny|zira|hazel|susan|samantha|victoria|karen|moira|tessa|veena|fiona|serena|catherine|linda|ayanda/i,
     knownMale =
       /\b(?:male|david|mark|guy|george|james|daniel|alex|fred|aaron|arthur|andrew|ryan|christopher|eric|roger|stefan)\b/i,
+    african =
+      /(?:en[-_](?:NG|ZA|KE|GH)|nigeria|nigerian|yoruba|igbo|swahili|africa|ayanda)/i,
     preferred =
+      // Zero-credit fallback must keep Dami female and African where the
+      // device exposes such a voice. Never silently choose the generic default.
       voices.find(
-        (v) => knownFemale.test(v.name) && /en|nigeria|yoruba|africa/i.test(`${v.name} ${v.lang}`),
+        (v) =>
+          african.test(`${v.name} ${v.lang}`) &&
+          knownFemale.test(v.name) &&
+          !knownMale.test(v.name),
+      ) ??
+      voices.find(
+        (v) =>
+          african.test(`${v.name} ${v.lang}`) &&
+          !knownMale.test(v.name),
       ) ??
       voices.find(
         (v) =>
@@ -225,7 +237,7 @@ function browserSpeech(text: string, o: VoiceOptions): SpeechHandle {
       );
   if (!preferred)
     throw new Error(
-      "Dami's African female voice is temporarily unavailable. The complete written answer is still shown.",
+      "No suitable female fallback voice is installed on this device. The complete written answer is still shown.",
     );
   u.voice = preferred;
   let settled = false,
