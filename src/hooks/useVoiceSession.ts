@@ -57,6 +57,13 @@ const END_OF_SPEECH_SILENCE_MS = 650,
   NOISE_MULTIPLIER = 1.8,
   NOISE_MARGIN = 0.012;
 
+function publicVoiceError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : "";
+  if (/groq|whisper|invalid_enum|zod|transcriptengine|api[_ -]?key|provider/i.test(message))
+    return fallback;
+  return message.trim() || fallback;
+}
+
 export function useVoiceSession() {
   const [stage, setStage] = useState<VoiceStage>("welcome"),
     [question, setQuestion] = useState(""),
