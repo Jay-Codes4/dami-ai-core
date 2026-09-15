@@ -16,6 +16,7 @@ export interface AudioCapture {
   durationMs: number;
   transcript?: string;
   partialTranscript?: string;
+  browserTranscript?: string;
   streamed?: boolean;
 }
 export interface Recorder {
@@ -283,7 +284,9 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
 
   const teardown = () => {
     try {
-      browserRecognizer?.stop();
+      // abort() freezes the best hypothesis synchronously; stop() can emit its
+      // final result after we have already built the AudioCapture object.
+      browserRecognizer?.abort();
     } catch {
       // Browser recognition is best-effort resilience only.
     }
@@ -488,7 +491,7 @@ export async function transcribeSamples(
   try {
     return await saharaFinal(capture, options);
   } catch (error) {
-    if (liveSaharaTranscript)
+    if (liveSaharaTranscript && !/insufficient balance|quota|credit|resource exhausted/i.test(error instanceof Error ? error.message : String(error)))
       return {
         text: liveSaharaTranscript,
         durationMs: capture.durationMs,
