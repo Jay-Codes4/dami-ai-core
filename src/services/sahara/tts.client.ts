@@ -788,6 +788,65 @@ async function saharaHttpSpeech(text: string, o: VoiceOptions): Promise<SpeechHa
   };
 }
 
+async function edgeAfricanFemaleSpeech(text: string): Promise<SpeechHandle | null> {
+  const chunks = splitForHttpSpeech(text);
+  if (!chunks.length) return null;
+  const fetchChunk = async (chunk: string) => {
+    const response = await fetch("/api/dami-edge-tts", {
+      method: "POST",
+      signal: AbortSignal.timeout(15000),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: chunk }),
+    });
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return blob.size ? blob : null;
+  };
+  const first = await fetchChunk(chunks[0]!);
+  if (!first) return null;
+
+  const audio = getSharedAudio() ?? new Audio();
+  let stopped = false, paused = false, settled = false, startedDone = false, url: string | null = null;
+  let resolveStarted!: () => void, resolveEnded!: () => void;
+  const started = new Promise<void>((r) => (resolveStarted = r));
+  const ended = new Promise<void>((r) => (resolveEnded = r));
+  const markStarted = () => { if (!startedDone) { startedDone = true; resolveStarted(); } };
+  const finish = () => { markStarted(); if (!settled) { settled = true; resolveEnded(); } };
+  const play = async (blob: Blob) => {
+    if (stopped) return;
+    if (url) URL.revokeObjectURL(url);
+    url = URL.createObjectURL(blob);
+    audio.pause(); audio.src = url; audio.preload = "auto"; audio.playbackRate = 1;
+    await audio.play(); markStarted();
+    await new Promise<void>((resolve, reject) => {
+      audio.addEventListener("ended", () => resolve(), { once: true });
+      audio.addEventListener("error", () => reject(new Error("Fallback playback failed")), { once: true });
+    });
+  };
+  void (async () => {
+    try {
+      let next = chunks[1] ? fetchChunk(chunks[1]!) : null;
+      await play(first);
+      for (let i = 1; i < chunks.length && !stopped; i++) {
+        const blob = await next;
+        if (!blob) throw new Error("Fallback voice chunk failed");
+        next = chunks[i + 1] ? fetchChunk(chunks[i + 1]!) : null;
+        await play(blob);
+      }
+    } catch {} finally {
+      audio.pause(); audio.removeAttribute("src"); audio.load();
+      if (url) URL.revokeObjectURL(url);
+      url = null; finish();
+    }
+  })();
+  return {
+    stop() { stopped = true; audio.pause(); audio.removeAttribute("src"); audio.load(); if (url) URL.revokeObjectURL(url); url = null; finish(); },
+    pause() { if (!settled && !paused) { paused = true; audio.pause(); } },
+    resume() { if (!settled && paused) { paused = false; void audio.play(); } },
+    isPaused: () => paused, started, ended,
+  };
+}
+
 export async function speak(text: string, requested: VoiceOptions): Promise<SpeechHandle> {
   const clean = cleanSpeechText(text),
     o = normaliseVoice(requested);
@@ -802,9 +861,13 @@ export async function speak(text: string, requested: VoiceOptions): Promise<Spee
   const sahara = await saharaSpeech(clean, o).catch(() => null);
   if (sahara) return sahara;
 
-  // Zero-credit demo fallback. This is deliberately separate from Sahara:
-  // prefer a locally installed African/Nigerian female browser voice, then the
-  // desktop bridge when available. Never label this fallback as Sahara.
+  // Zero-credit neural fallback for the deadline demo. Sahara remains primary.
+  // Ezinne is Microsoft's Nigerian English female neural voice and requires no
+  // Dami API key through the Edge Read Aloud fallback service.
+  const edgeFemale = await edgeAfricanFemaleSpeech(clean).catch(() => null);
+  if (edgeFemale) return edgeFemale;
+
+  // Device speech is now only a last-resort fallback after both neural paths.
   try {
     return browserSpeech(clean, o);
   } catch {}
