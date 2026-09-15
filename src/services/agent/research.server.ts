@@ -3,6 +3,7 @@
  * Primary path: Exa live web search -> Groq legal reasoning.
  */
 import type { Citation, ResearchAnswer } from "@/lib/types";
+import type { DamiLanguageCode } from "@/lib/languages";
 const GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = process.env["DAMI_GROQ_MODEL"] ?? "openai/gpt-oss-120b";
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
@@ -41,13 +42,13 @@ function hostFromUrl(url: string) {
     return "Web source";
   }
 }
-async function searchWithExa(question: string, apiKey: string): Promise<ExaResult[]> {
+async function searchWithExa(question: string, apiKey: string, jurisdictionHint?: string): Promise<ExaResult[]> {
   const response = await fetch(EXA_SEARCH_URL, {
     method: "POST",
     signal: AbortSignal.timeout(6000),
     headers: { "Content-Type": "application/json", "x-api-key": apiKey },
     body: JSON.stringify({
-      query: `${question}\nFind the strongest current legal authorities. Prioritize constitutions, statutes, regulations, court decisions, gazettes, regulators, government portals, and reputable legal-information institutes.`,
+      query: `${question}\n${jurisdictionHint ? `Jurisdiction: ${jurisdictionHint}. Prioritize authorities from this jurisdiction unless the user explicitly names another jurisdiction.\n` : ""}Find the strongest current legal authorities. Prioritize constitutions, statutes, regulations, court decisions, gazettes, regulators, government portals, and reputable legal-information institutes.`,
       type: "auto",
       numResults: 4,
       contents: { highlights: true },
@@ -162,8 +163,9 @@ async function researchWithExaAndGroq(
   question: string,
   exaKey: string,
   groqKey: string,
+  jurisdictionHint?: string,
 ): Promise<ResearchAnswer> {
-  const results = await searchWithExa(question, exaKey);
+  const results = await searchWithExa(question, exaKey, jurisdictionHint);
   if (!results.length)
     throw new ResearchError(
       "Dami couldn't find strong enough live sources for that question. Try adding the jurisdiction.",
@@ -191,9 +193,17 @@ async function researchWithGroqOnly(question: string, groqKey: string): Promise<
       "Live web search was unavailable for this request. Current authorities should be verified against an official legal source before professional reliance.",
   };
 }
-export async function research(question: string): Promise<ResearchAnswer> {
+export async function research(
+  question: string,
+  context?: { selectedLanguage?: DamiLanguageCode },
+): Promise<ResearchAnswer> {
   const trimmed = question.trim();
   if (!trimmed) throw new ResearchError("Ask Dami a question first.", 400);
+  // Igbo and Nigerian Pidgin are strong Nigeria-context signals in Dami. Use
+  // Nigeria as the default research jurisdiction for those modes, while an
+  // explicit country/jurisdiction in the user question always takes priority.
+  const jurisdictionHint =
+    context?.selectedLanguage === "ig" || context?.selectedLanguage === "pcm" ? "Nigeria" : undefined;
   const groqKey = process.env["GROQ_API_KEY"];
   if (!groqKey)
     throw new ResearchError(
@@ -203,7 +213,7 @@ export async function research(question: string): Promise<ResearchAnswer> {
   const exaKey = process.env["EXA_API_KEY"];
   if (process.env["DAMI_LIVE_WEB"] !== "false" && exaKey) {
     try {
-      return await researchWithExaAndGroq(trimmed, exaKey, groqKey);
+      return await researchWithExaAndGroq(trimmed, exaKey, groqKey, jurisdictionHint);
     } catch (error) {
       console.error("Exa + Groq live research path failed", error);
       if (error instanceof ResearchError && (error.status === 401 || error.status === 403))
