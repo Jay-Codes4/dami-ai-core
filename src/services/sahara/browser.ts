@@ -18,7 +18,7 @@ export interface TranscriptionResult {
   text: string;
   durationMs: number;
   requestId: string | null;
-  engine: "sahara-stt" | "windows-speech";
+  engine: "sahara-stt" | "windows-speech" | "browser-speech";
   language: string;
 }
 
