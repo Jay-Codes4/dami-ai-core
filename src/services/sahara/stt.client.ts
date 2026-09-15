@@ -28,7 +28,7 @@ export interface TranscriptionResult {
   text: string;
   durationMs: number;
   requestId: string | null;
-  engine: "sahara-stt" | "windows-speech";
+  engine: "sahara-stt" | "windows-speech" | "browser-speech";
   language: string;
 }
 
@@ -158,6 +158,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     startedAt = Date.now();
   let transcript = "",
     committedTranscript = "",
+    browserTranscript = "",
     stopped = false,
     cancelled = false,
     ack = 0,
@@ -165,6 +166,33 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
     finalResolve: ((text: string) => void) | null = null;
   const recordedChunks: Uint8Array[] = [];
   let terminalError = "";
+
+  // Keep a local browser recognizer running alongside Sahara. Sahara remains
+  // primary, but this gives the web/mobile demo an immediate transcript when
+  // the upstream account is out of balance or temporarily unavailable.
+  const SpeechRecognitionCtor = (window as typeof window & {
+    SpeechRecognition?: new () => any;
+    webkitSpeechRecognition?: new () => any;
+  }).SpeechRecognition ?? (window as typeof window & { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition;
+  let browserRecognizer: any = null;
+  if (SpeechRecognitionCtor) {
+    try {
+      browserRecognizer = new SpeechRecognitionCtor();
+      browserRecognizer.continuous = true;
+      browserRecognizer.interimResults = true;
+      browserRecognizer.lang = language === "pcm" ? "en-NG" : language || "en-NG";
+      browserRecognizer.onresult = (event: any) => {
+        let combined = "";
+        for (let i = 0; i < event.results.length; i++)
+          combined += `${event.results[i]?.[0]?.transcript ?? ""} `;
+        browserTranscript = combined.trim();
+      };
+      browserRecognizer.onerror = () => {};
+      browserRecognizer.start();
+    } catch {
+      browserRecognizer = null;
+    }
+  }
   const finalPromise = new Promise<string>((resolve) => {
     finalResolve = resolve;
   });
@@ -254,6 +282,11 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
   };
 
   const teardown = () => {
+    try {
+      browserRecognizer?.stop();
+    } catch {
+      // Browser recognition is best-effort resilience only.
+    }
     processor.onaudioprocess = null;
     try {
       processor.disconnect();
@@ -337,6 +370,7 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
       durationMs: Date.now() - startedAt,
       transcript: committedTranscript,
       partialTranscript: transcript.trim(),
+      browserTranscript: browserTranscript.trim(),
       streamed: Boolean(committedTranscript),
     };
   };
@@ -450,6 +484,7 @@ export async function transcribeSamples(
   // Desktop wake capture does not set capture.partialTranscript, so its native
   // fallback remains correctly identified as windows-speech below.
   const liveSaharaTranscript = capture.partialTranscript?.trim();
+  const localBrowserTranscript = capture.browserTranscript?.trim() || options.browserTranscript?.trim();
   try {
     return await saharaFinal(capture, options);
   } catch (error) {
@@ -462,15 +497,16 @@ export async function transcribeSamples(
         language: options.language,
       };
 
-    // Native Windows recognition is a last-resort resilience path for desktop
-    // wake commands only. Sahara is still attempted first.
-    const fallback = options.browserTranscript?.trim();
-    if (fallback)
+    // If Sahara cannot complete the turn (including quota/balance failures),
+    // continue immediately with the locally captured browser transcript. This
+    // is explicitly labelled browser-speech and never counted as Sahara in the
+    // benchmark. Desktop wake text remains labelled windows-speech.
+    if (localBrowserTranscript)
       return {
-        text: fallback,
+        text: localBrowserTranscript,
         durationMs: capture.durationMs,
         requestId: null,
-        engine: "windows-speech",
+        engine: capture.browserTranscript?.trim() ? "browser-speech" : "windows-speech",
         language: options.language,
       };
     throw error;
