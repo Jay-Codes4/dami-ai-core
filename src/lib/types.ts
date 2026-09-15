@@ -59,7 +59,12 @@ export interface Transcript {
   createdAt: ISODateString;
 }
 
-export type TranscriptEngine = "sahara-stt" | "windows-speech" | "browser-speech" | "typed";
+export type TranscriptEngine =
+  | "sahara-stt"
+  | "groq-whisper-large-v3"
+  | "windows-speech"
+  | "browser-speech"
+  | "typed";
 
 export interface VoiceTranscript {
   originalTranscript: string;
