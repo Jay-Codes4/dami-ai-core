@@ -145,25 +145,13 @@ function Companion() {
           await bridge.beginVoiceTurn?.(wake?.activationId);
         }
         const command = wake?.command?.trim() || "";
+        // Desktop must not trust Windows Speech as the legal-question
+        // transcript. It is retained only for wake detection. Capture the
+        // actual question through Dami's normal recorder so the server can use
+        // Sahara first and Groq Whisper Large V3 when Sahara is unavailable.
         if (command) {
           void playListeningCue();
           window.setTimeout(() => void playListeningEndCue(), 260);
-          // Desktop wake-listener already produced a usable Windows transcript.
-          // Do not send its audio back through Sahara when credits/quota are
-          // unavailable; use the native transcript directly for this Desktop
-          // turn. Web/Sahara transcription and benchmark paths are untouched.
-          await askWakeCapture("", command);
-          return;
-        }
-        // If the wake phrase contained no command, use Windows' native
-        // recognizer for the follow-up question on Desktop. This keeps Desktop
-        // demo input independent of Sahara quota while leaving web STT intact.
-        if (bridge?.isDesktop && bridge.localTranscribe) {
-          const localCommand = (await bridge.localTranscribe()).trim();
-          if (localCommand) {
-            await askWakeCapture("", localCommand);
-            return;
-          }
         }
         // Open the microphone immediately. The rising cue and visible listening
         // state acknowledge a wake phrase without delaying capture or recording
