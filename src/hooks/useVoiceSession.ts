@@ -274,10 +274,15 @@ export function useVoiceSession() {
       } catch (err) {
         if (cancelled.current) return;
         console.error(err);
+        const message = err instanceof Error ? err.message : "";
+        // Mobile Chromium can surface an AbortSignal cancellation from an
+        // interrupted/replaced request as the raw string "signal is aborted
+        // without reason". Never expose that implementation error to users.
+        // A retry remains available and uses the preserved question.
         setError(
-          err instanceof Error && err.message
-            ? err.message
-            : "I couldn't complete that research. Please try again.",
+          /signal is aborted|aborterror|aborted without reason/i.test(message)
+            ? "The request was interrupted. Please try again."
+            : message || "I couldn't complete that research. Please try again.",
         );
         setStage("error");
       } finally {
