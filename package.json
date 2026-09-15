@@ -121,7 +121,8 @@
     "vaul": "^1.1.2",
     "vite-tsconfig-paths": "^6.0.2",
     "ws": "^8.18.3",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "node-edge-tts": "^1.2.10"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
