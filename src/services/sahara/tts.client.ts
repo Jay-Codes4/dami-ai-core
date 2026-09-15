@@ -849,7 +849,22 @@ async function edgeAfricanFemaleSpeech(text: string): Promise<SpeechHandle | nul
 
 export async function speak(text: string, requested: VoiceOptions): Promise<SpeechHandle> {
   const clean = cleanSpeechText(text),
-    o = normaliseVoice(requested);
+    o = normaliseVoice(requested),
+    desktopBridge =
+      typeof window === "undefined"
+        ? undefined
+        : (window as typeof window & { damiDesktop?: DesktopVoiceBridge }).damiDesktop;
+
+  // Desktop demo path: Dami Voice only. Do not contact Sahara TTS here.
+  // Sahara STT/research/benchmarking are untouched; this isolates only spoken
+  // answer playback from Sahara quota/credit state.
+  if (desktopBridge?.isDesktop) {
+    const desktopDamiVoice = await edgeAfricanFemaleSpeech(clean).catch(() => null);
+    if (desktopDamiVoice) return desktopDamiVoice;
+    throw new Error(
+      "Dami Voice could not start on Desktop. The written answer is ready; tap Read Aloud to retry.",
+    );
+  }
 
   // Dami Voice is the reliable primary playback voice. Sahara remains a core
   // speech provider for Dami and is still used for competition transcription,
