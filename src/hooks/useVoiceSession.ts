@@ -352,6 +352,12 @@ export function useVoiceSession() {
   const askWakeCapture = useCallback(
     async (audioBase64: string, fallbackText: string) => {
       const fallback = fallbackText.trim();
+      // Native Desktop wake turns can arrive with the spoken command already
+      // captured, so they bypass startListening(). Prime the same reusable
+      // audio element here as the normal browser/tap flow. This keeps automatic
+      // Dami Voice playback alive after the async transcription + research
+      // round trip without changing STT, wake detection, or research.
+      void prepareAudioPlayback();
       setError(null);
       setAnswer(null);
       setPartial(fallback);
