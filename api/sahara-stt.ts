@@ -53,36 +53,6 @@ async function status(fileId: string, key: string) {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function groqFallback(audio: Blob, fileName: string, language: string) {
-  const key = process.env.GROQ_API_KEY;
-  if (!key) return null;
-  const form = new FormData();
-  form.set("file", audio, fileName || "dami.wav");
-  form.set("model", "whisper-large-v3");
-  form.set("response_format", "json");
-  form.set("temperature", "0");
-  // For code-switch modes, do not force a single language; Whisper can infer
-  // the mixed utterance. For plain English, an explicit hint improves latency.
-  if (language === "en") form.set("language", "en");
-  form.set(
-    "prompt",
-    "African legal conversation. Preserve Nigerian Pidgin, Igbo and English code-switching. Legal terms may include Constitution, Nigeria Police Force, Evidence Act, Administration of Criminal Justice Act, fundamental rights, arrest, court, lawyer and Dami.",
-  );
-  const started = Date.now();
-  const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-    body: form,
-  });
-  const raw = await response.text();
-  let payload: { text?: string; error?: { message?: string } } | null = null;
-  try { payload = raw ? JSON.parse(raw) : null; } catch { payload = null; }
-  const text = payload?.text?.trim();
-  if (response.ok && text)
-    return { text, requestId: null, durationMs: Date.now() - started, engine: "groq-whisper-large-v3" };
-  return null;
-}
-
 export default async function handler(request: Request) {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
   const key = process.env.INTRON_API_KEY;
@@ -105,16 +75,13 @@ export default async function handler(request: Request) {
 
   const originalName = audio instanceof File && audio.name ? audio.name : "dami.webm";
   const started = Date.now();
-  if (!key) {
-    const fallback = await groqFallback(audio, originalName, language);
-    return fallback
-      ? json(fallback)
-      : json({ error: "Speech transcription is temporarily unavailable.", code: "not_configured" }, 503);
-  }
+  if (!key)
+    return json(
+      { error: "Sahara transcription is not configured.", code: "not_configured" },
+      503,
+    );
   const queued = await queueSahara(audio, originalName, language, key);
   if (!queued.response.ok) {
-    const fallback = await groqFallback(audio, originalName, language);
-    if (fallback) return json(fallback);
     const upstream =
       queued.payload?.message ??
       queued.payload?.error ??
@@ -157,13 +124,9 @@ export default async function handler(request: Request) {
       return json({ text: text.trim(), requestId: fileId, durationMs: Date.now() - started });
     }
     if (state === "FILE_PROCESSING_FAILED") {
-      const fallback = await groqFallback(audio, originalName, language);
-      if (fallback) return json(fallback);
       return json({ error: "Sahara could not process that recording. Please try again." }, 502);
     }
   }
 
-  const fallback = await groqFallback(audio, originalName, language);
-  if (fallback) return json(fallback);
   return json({ error: "Sahara is still processing this turn.", requestId: fileId }, 202);
 }
