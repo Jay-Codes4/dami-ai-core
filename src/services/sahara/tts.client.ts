@@ -849,47 +849,20 @@ async function edgeAfricanFemaleSpeech(text: string): Promise<SpeechHandle | nul
 
 export async function speak(text: string, requested: VoiceOptions): Promise<SpeechHandle> {
   const clean = cleanSpeechText(text),
-    o = normaliseVoice(requested),
-    desktopBridge =
-      typeof window === "undefined"
-        ? undefined
-        : (window as typeof window & { damiDesktop?: DesktopVoiceBridge }).damiDesktop;
+    o = normaliseVoice(requested);
 
-  // Desktop demo path: Dami Voice only. Do not contact Sahara TTS here.
-  // Sahara STT/research/benchmarking are untouched; this isolates only spoken
-  // answer playback from Sahara quota/credit state.
-  if (desktopBridge?.isDesktop) {
-    const desktopDamiVoice = await edgeAfricanFemaleSpeech(clean).catch(() => null);
-    if (desktopDamiVoice) return desktopDamiVoice;
-    throw new Error(
-      "Dami Voice could not start on Desktop. The written answer is ready; tap Read Aloud to retry.",
-    );
-  }
-
-  // Dami Voice is the reliable primary playback voice. Sahara remains a core
-  // speech provider for Dami and is still used for competition transcription,
-  // benchmarking and as the first neural resilience path when Dami Voice is
-  // unavailable. Keep provider attribution explicit in benchmark evidence.
-  const damiVoice = await edgeAfricanFemaleSpeech(clean).catch(() => null);
-  if (damiVoice) return damiVoice;
-
-  // Sahara Generate remains the first provider fallback.
+  // Competition path: Sahara is the only answer-voice provider on both web
+  // and desktop. Do not silently substitute Dami Voice, browser speech,
+  // Windows speech, or any other TTS provider when Sahara is unavailable.
+  // This intentionally exposes Sahara quota/credit/provider failures during
+  // judging instead of masking them with a fallback.
   const generated = await saharaHttpSpeech(clean, o).catch(() => null);
   if (generated) return generated;
 
-  // Keep Sahara streaming as the secondary provider resilience path.
   const sahara = await saharaSpeech(clean, o).catch(() => null);
   if (sahara) return sahara;
 
-  // Device speech is now only a last-resort fallback after both neural paths.
-  try {
-    return browserSpeech(clean, o);
-  } catch {}
-
-  const desktop = nativeDesktopSpeech(clean);
-  if (desktop) return desktop;
-
   throw new Error(
-    "Dami's voice session could not start. The written answer is ready; tap Read Aloud to retry.",
+    "Sahara voice is currently unavailable or out of credits. The written answer is still available.",
   );
 }
