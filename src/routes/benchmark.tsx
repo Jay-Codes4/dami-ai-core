@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, Eye, EyeOff, Loader2, Mic, Square, Upload } from "lucide-react";
+import { Download, Loader2, Mic, Square, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
@@ -83,8 +83,6 @@ function BenchmarkPage() {
     [referenceTranscript, setReferenceTranscript] = useState(""),
     [codeSwitchTokens, setCodeSwitchTokens] = useState(""),
     [criticalEntities, setCriticalEntities] = useState(""),
-    [accessToken, setAccessToken] = useState(""),
-    [showAccessToken, setShowAccessToken] = useState(false),
     [audio, setAudio] = useState<{ blob: Blob; name: string; durationMs: number } | null>(null),
     [recording, setRecording] = useState(false),
     [running, setRunning] = useState(false),
@@ -226,7 +224,6 @@ function BenchmarkPage() {
         method: "POST",
         body: form,
       };
-      if (accessToken) request.headers = { Authorization: `Bearer ${accessToken}` };
       const response = await fetch("/benchmark/run", request);
       const payload = (await response.json().catch(() => ({}))) as BenchmarkRunResponse & {
         error?: string;
@@ -299,7 +296,7 @@ function BenchmarkPage() {
       <div className="mx-auto max-w-6xl space-y-8">
         <header className="max-w-3xl space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            Development / admin evidence tool
+            Competition benchmark
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">
             African code-switch ASR benchmark
@@ -432,30 +429,7 @@ function BenchmarkPage() {
               </p>
             </div>
 
-            {status?.tokenRequired && (
-              <label className="block text-sm font-medium">
-                Admin access token
-                <div className="relative mt-1">
-                  <input
-                    type={showAccessToken ? "text" : "password"}
-                    autoComplete="off"
-                    value={accessToken}
-                    onChange={(event) => setAccessToken(event.target.value)}
-                    className="h-11 w-full rounded-md border bg-background px-3 pr-11 font-normal"
-                    placeholder="Kept in memory for this page only"
-                  />
-                  <button
-                    type="button"
-                    aria-label={showAccessToken ? "Hide admin access token" : "Show admin access token"}
-                    title={showAccessToken ? "Hide token" : "Show token"}
-                    onClick={() => setShowAccessToken((shown) => !shown)}
-                    className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-muted-foreground hover:text-foreground"
-                  >
-                    {showAccessToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </label>
-            )}
+
 
             {status && (
               <div className="grid grid-cols-2 gap-2 text-xs">
