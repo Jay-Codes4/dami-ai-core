@@ -40,11 +40,11 @@ Prototype: https://dami-ai-core.vercel.app
 
 Repository: https://github.com/Jay-Codes4/dami-ai-core
 
-Technical summary: React + TypeScript + TanStack Start; Electron desktop companion; Sahara STT/TTS integration and streaming gateway; Exa source retrieval; Groq reasoning; local desktop wake phrase; optional YarnGPT local Nigerian female TTS fallback.
+Technical summary: React + TypeScript + TanStack Start; Electron desktop companion; Sahara STT/TTS integration and streaming gateway; Exa source retrieval; Groq reasoning; local desktop wake phrase.
 
 Responsible AI: see RESPONSIBLE_AI.md.
 
-Benchmark: open the protected `/benchmark` route or use `benchmark/`. The same audio is evaluated independently by Sahara, Whisper and Meta MMS, with automatic WER/CER/latency, deterministic code-switch/entity checks, downstream legal-agent review, per-category aggregates and CSV/JSON export. Results remain empty until real model outputs are measured on permitted audio.
+Benchmark: open the protected `/benchmark` route or use `benchmark/`. The same audio is evaluated independently by Sahara and the required comparison ASR models, with automatic WER/CER/latency, deterministic code-switch/entity checks, downstream legal-agent review, per-category aggregates and CSV/JSON export. Results remain empty until real model outputs are measured on permitted audio.
 
 ## Final human-input checklist
 
