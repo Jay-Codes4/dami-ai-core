@@ -371,13 +371,9 @@ export function useVoiceSession() {
       setStage("transcribing");
       try {
         if (!audioBase64) {
-          const settings = storage.getSettings(),
-            language = getDamiLanguage(settings.speechLanguage),
-            voiceTranscript = buildVoiceTranscript(fallback, "windows-speech", language);
-          setPartial("");
-          setTranscript(voiceTranscript);
-          await ask(fallback, voiceTranscript);
-          return;
+          throw new Error(
+            "Sahara did not receive captured audio for this wake request. Please click Dami and try again.",
+          );
         }
         const binary = atob(audioBase64),
           bytes = new Uint8Array(binary.length);
@@ -417,18 +413,11 @@ export function useVoiceSession() {
         setTranscript(voiceTranscript);
         await ask(originalTranscript, voiceTranscript);
       } catch (err) {
-        // The OS transcript is only a resilience fallback; Sahara remains the
-        // primary transcription path for a wake phrase plus command.
-        if (fallback) {
-          setPartial("");
-          const settings = storage.getSettings(),
-            language = getDamiLanguage(settings.speechLanguage),
-            voiceTranscript = buildVoiceTranscript(fallback, "windows-speech", language);
-          setTranscript(voiceTranscript);
-          await ask(fallback, voiceTranscript);
-          return;
-        }
-        setError(err instanceof Error ? err.message : "I couldn't transcribe that wake request.");
+        // Competition path: a desktop wake request must also complete through
+        // Sahara STT. Native Windows recognition is used only to detect the
+        // wake phrase and must not replace Sahara transcription when Sahara is
+        // unavailable or out of credits.
+        setError(err instanceof Error ? err.message : "Sahara couldn't transcribe that wake request.");
         setStage("error");
       }
     },
