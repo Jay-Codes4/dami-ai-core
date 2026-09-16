@@ -27,7 +27,7 @@ Windows companion: [Download the newest Dami installer](https://github.com/Jay-C
 The real competition flow is:
 
 ```text
-Microphone → Sahara STT → original code-switched transcript → normalized retrieval query → legal intent → Exa source retrieval/ranking → Groq grounded answer → citations → African female voice
+Microphone → Sahara STT → original code-switched transcript → normalized retrieval query → legal intent → Exa source retrieval/ranking → grounded legal answer → citations → Sahara voice
 ```
 
 Dami also ships as a Windows Electron companion. Installed Dami floats on the desktop and supports hands-free **“Hey Dami”** activation. The Windows build uses continuous native Windows speech recognition with an accent-tolerant wake grammar and dictation fallback, then starts Dami's normal voice workflow. Single-clicking or double-clicking the avatar is an equally supported activation method.
@@ -48,7 +48,7 @@ Competition language set: **English, Igbo and Nigerian Pidgin**. Sahara's docume
 - Sahara STT streaming gateway with server-side Authorization
 - Sahara TTS server proxy
 - Exa live source retrieval
-- Groq legal reasoning
+- Source-grounded legal reasoning
 - Server-side secrets only; no API keys in client bundles
 - Visible voice states: listening → transcribing → researching → thinking → speaking → error/retry
 - Source-grounded legal answers with jurisdiction awareness
@@ -81,8 +81,6 @@ Controlled submission benchmark completed on 4 consented, researcher-recorded co
 
 Per-language findings: Sahara achieved the best English-Pidgin WER/CER (7.8% / 2.4%) and the strongest overall declared code-switch preservation. Groq Whisper Large V3 achieved the lowest overall WER/CER and strongest entity preservation, while Turbo was the fastest. The benchmark is intentionally small and is presented as controlled product-validation evidence, not a population-level language benchmark.
 
-
-Intron credits have been restored, so the Sahara execution path is ready. Actual benchmark rows remain empty until permitted test audio is added to `benchmark/manifest.csv` and the models are run; no result is estimated or fabricated.
 
 Optional local/batch smoke-test examples:
 
@@ -119,7 +117,6 @@ Dami's submission approach covers privacy and consent, legal safety, source inte
 
 ```text
 api/                 server-side speech endpoints
-voice-gateway/       Sahara streaming WebSocket gateway
 desktop/             Electron desktop companion
 src/                 Dami web application and legal agent
 benchmark/           benchmark manifest, model runners, result schema and scorer
