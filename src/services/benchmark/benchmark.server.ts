@@ -1,5 +1,5 @@
 /** Competition benchmark orchestration. This module is server-only. */
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type {
@@ -54,32 +54,16 @@ type AudioInput = {
   category: BenchmarkLanguageCategory;
 };
 
-function configuredToken() {
-  return process.env["DAMI_BENCHMARK_ACCESS_TOKEN"]?.trim() ?? "";
-}
-
-function safeTokenMatch(received: string, expected: string) {
-  const receivedHash = createHash("sha256").update(received).digest();
-  const expectedHash = createHash("sha256").update(expected).digest();
-  return timingSafeEqual(receivedHash, expectedHash);
-}
-
 function benchmarkEnabled() {
-  // In production, a configured benchmark access token is sufficient to enable
-  // the protected runner. This avoids a second hidden feature flag leaving the
-  // UI disabled even when the secure admin token is correctly configured.
-  return (
-    process.env["NODE_ENV"] !== "production" ||
-    process.env["DAMI_BENCHMARK_ENABLED"] === "true" ||
-    Boolean(configuredToken())
-  );
+  // The competition benchmark is intentionally public so judges can reproduce
+  // the submitted measurements without requesting an admin credential.
+  return process.env["NODE_ENV"] !== "production" || process.env["DAMI_BENCHMARK_ENABLED"] !== "false";
 }
 
 export function benchmarkStatus() {
-  const enabled = benchmarkEnabled();
   return {
-    enabled,
-    tokenRequired: Boolean(configuredToken()) || process.env["NODE_ENV"] === "production",
+    enabled: benchmarkEnabled(),
+    tokenRequired: false,
     providers: {
       sahara: Boolean(process.env["INTRON_API_KEY"]),
       whisper: Boolean(process.env["GROQ_API_KEY"]),
@@ -89,22 +73,10 @@ export function benchmarkStatus() {
   };
 }
 
-export function authorizeBenchmark(request: Request) {
-  if (!benchmarkEnabled())
-    return { ok: false as const, status: 404, error: "Benchmark mode is disabled." };
-  const expected = configuredToken();
-  if (process.env["NODE_ENV"] === "production" && !expected)
-    return {
-      ok: false as const,
-      status: 503,
-      error: "Benchmark mode needs a server-side access token before it can run in production.",
-    };
-  if (!expected) return { ok: true as const };
-  const authorization = request.headers.get("authorization") ?? "";
-  const received = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
-  return safeTokenMatch(received, expected)
+export function authorizeBenchmark(_request: Request) {
+  return benchmarkEnabled()
     ? { ok: true as const }
-    : { ok: false as const, status: 401, error: "The benchmark access token is invalid." };
+    : { ok: false as const, status: 404, error: "Benchmark mode is disabled." };
 }
 
 function errorResult(
