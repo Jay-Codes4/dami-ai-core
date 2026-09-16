@@ -168,9 +168,9 @@ export async function startRecording(maxSeconds: number, language = "en"): Promi
   const recordedChunks: Uint8Array[] = [];
   let terminalError = "";
 
-  // Keep a local browser recognizer running alongside Sahara. Sahara remains
-  // primary, but this gives the web/mobile demo an immediate transcript when
-  // the upstream account is out of balance or temporarily unavailable.
+  // Browser recognition may provide a live visual hint while recording, but it
+  // is never accepted as the final competition transcript. Sahara is the only
+  // production transcription engine for web and desktop during judging.
   const SpeechRecognitionCtor = (window as typeof window & {
     SpeechRecognition?: new () => any;
     webkitSpeechRecognition?: new () => any;
@@ -515,7 +515,12 @@ export async function transcribeSamples(
   try {
     return await saharaFinal(capture, options);
   } catch (error) {
-    if (liveSaharaTranscript && !/insufficient balance|quota|credit|resource exhausted/i.test(error instanceof Error ? error.message : String(error)))
+    if (
+      liveSaharaTranscript &&
+      !/insufficient balance|quota|credit|resource exhausted/i.test(
+        error instanceof Error ? error.message : String(error),
+      )
+    )
       return {
         text: liveSaharaTranscript,
         durationMs: capture.durationMs,
@@ -524,18 +529,9 @@ export async function transcribeSamples(
         language: options.language,
       };
 
-    // If Sahara cannot complete the turn (including quota/balance failures),
-    // continue immediately with the locally captured browser transcript. This
-    // is explicitly labelled browser-speech and never counted as Sahara in the
-    // benchmark. Desktop wake text remains labelled windows-speech.
-    if (localBrowserTranscript)
-      return {
-        text: localBrowserTranscript,
-        durationMs: capture.durationMs,
-        requestId: null,
-        engine: capture.browserTranscript?.trim() ? "browser-speech" : "windows-speech",
-        language: options.language,
-      };
+    // Competition path: never mask a Sahara failure with browser or Windows
+    // transcription. Surface the Sahara error so judges see the real provider
+    // state, including quota/credit failures.
     throw error;
   }
 }
