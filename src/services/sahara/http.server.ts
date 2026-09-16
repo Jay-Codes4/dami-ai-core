@@ -38,27 +38,6 @@ function pcm16WavFromBase64(audioBase64: string, sampleRate: number) {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-async function groqTranscribe(data: z.infer<typeof SttBody>) {
-  const key = process.env.GROQ_API_KEY;
-  if (!key) return null;
-  const form = new FormData();
-  form.set("file", pcm16WavFromBase64(data.audioBase64, data.sampleRate), "dami.wav");
-  form.set("model", "whisper-large-v3");
-  form.set("response_format", "json");
-  form.set("temperature", "0");
-  if (data.language === "en" && !data.codeSwitching) form.set("language", "en");
-  form.set("prompt", "African legal conversation. Preserve Nigerian Pidgin, Igbo and English code-switching. Terms may include Constitution, Nigeria Police Force, Evidence Act, Administration of Criminal Justice Act, fundamental rights, arrest, court, lawyer and Dami.");
-  const started = Date.now();
-  const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-    method: "POST", headers: { Authorization: `Bearer ${key}` }, body: form,
-  });
-  const payload = (await response.json().catch(() => null)) as { text?: string } | null;
-  const text = payload?.text?.trim();
-  return response.ok && text
-    ? { text, durationMs: Date.now() - started, requestId: null, engine: "groq-whisper-large-v3", language: data.language }
-    : null;
-}
-
 export async function handleSaharaStt(request: Request) {
   let body: unknown;
   try {
@@ -83,8 +62,6 @@ export async function handleSaharaStt(request: Request) {
       );
     return Response.json(result);
   } catch (error) {
-    const fallback = await groqTranscribe(parsed.data).catch(() => null);
-    if (fallback) return Response.json(fallback);
     if (error instanceof SaharaNotConfiguredError)
       return Response.json({ error: error.message, code: "not_configured" }, { status: 503 });
     if (error instanceof SaharaRequestError)
