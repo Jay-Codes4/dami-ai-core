@@ -40,7 +40,6 @@ export const Route = createFileRoute("/benchmark")({
 
 type BenchmarkStatus = {
   enabled: boolean;
-  tokenRequired: boolean;
   providers: { sahara: boolean; whisper: boolean; model3: boolean; legalAgent: boolean };
 };
 type ReviewField =
@@ -312,8 +311,7 @@ function BenchmarkPage() {
           <Alert>
             <AlertTitle>Benchmark mode is disabled</AlertTitle>
             <AlertDescription>
-              Set the server-only DAMI_BENCHMARK_ENABLED flag and access token before running this
-              page in production.
+              The public competition benchmark is temporarily unavailable on the server.
             </AlertDescription>
           </Alert>
         )}
