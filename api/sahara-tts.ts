@@ -1,3 +1,4 @@
+// Sahara competition TTS endpoint.
 type Body = { text?: string; accent?: string; gender?: string; language?: string };
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
