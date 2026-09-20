@@ -10,7 +10,7 @@ Run identical audio through three systems:
 2. **faster-whisper large-v3** — global/open Whisper baseline
 3. **Meta MMS 1B All** — multilingual/African-language baseline through `run_mms.py`
 
-The `/benchmark` admin route mirrors this three-model comparison and also runs every successful transcript through Dami's legal agent. `run_hf_asr.py` remains available for optional additional models.
+The public `/benchmark` route mirrors this three-model comparison and also runs every successful transcript through Dami's legal agent. `run_hf_asr.py` remains available for optional additional models.
 
 ## Test audio
 
@@ -90,9 +90,9 @@ python benchmark/score.py benchmark/results.csv
 
 Do not edit hypotheses to improve scores. Do not estimate missing measurements.
 
-## Browser/admin benchmark
+## Browser benchmark
 
-Set `DAMI_BENCHMARK_ENABLED=true`, configure a long random `DAMI_BENCHMARK_ACCESS_TOKEN`, and configure the provider variables listed in `.env.example`. Open `/benchmark`, enter the token, record or upload a permitted sample, provide the exact reference transcript, then run and review the comparison. Production requests are rejected unless the feature flag and server-side token are both present.
+Open `/benchmark`, record or upload a permitted sample, provide the exact reference transcript, then run and review the comparison. No admin password or access token is required; provider credentials remain server-side.
 
 The browser stores only result records in local storage; it does not persist uploaded/recorded audio. Provider failures receive null metrics and remain visible. CSV and JSON exports include raw transcripts, SHA-256 audio identity, WER/CER, latency, code-switch/entity scores, downstream legal-task checks, citations, notes and timestamps.
 
