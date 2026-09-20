@@ -59,7 +59,7 @@ The Sahara streaming gateway follows the documented session flow: connect, wait 
 
 **Judges / evaluators:** open the deployed [Dami Benchmark](https://dami-ai-core.vercel.app/benchmark) to inspect and run the reproducible ASR comparison. This evidence tool is intentionally isolated from the main Ask Dami demo so benchmark changes cannot alter the competition voice/legal workflow.
 
-The protected benchmark interface is available at `/benchmark`. In production, execution is protected by `DAMI_BENCHMARK_ACCESS_TOKEN`; judges can inspect the methodology and published evidence without receiving provider API secrets. It can record or upload one consented sample and sends the exact same audio bytes independently and concurrently to:
+The public benchmark interface is available at `/benchmark` with no admin password or access token required. Provider API credentials remain server-side. It can record or upload one consented sample and sends the exact same audio bytes independently and concurrently to:
 
 1. Intron Sahara v2.5 (primary competition ASR)
 2. Groq Whisper Large V3
@@ -105,7 +105,7 @@ Dami's submission approach covers privacy and consent, legal safety, source inte
 - [x] Windows desktop companion
 - [x] Hands-free “Hey Dami” desktop activation
 - [x] Code and technical documentation
-- [x] Protected browser benchmark route, automatic WER/CER, reviewable code-switch/entity scoring, downstream task checks, aggregates and exports
+- [x] Public browser benchmark route, automatic WER/CER, reviewable code-switch/entity scoring, downstream task checks, aggregates and exports
 - [x] Reproducible Sahara, Groq Whisper Large V3 and Groq Whisper Large V3 Turbo batch runners
 - [x] Responsible AI note
 - [x] Sahara credits restored / benchmark runner ready
