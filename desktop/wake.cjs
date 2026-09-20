@@ -1,3 +1,4 @@
+// Competition desktop wake-word integration.
 const WAKE_PHRASE_PATTERN =
   /(?:hey|hi|okay|ok)\s+(?:dami|dummy|demi|dammy|darmi|danny|day\s*me|dar\s*me)(?:\s+ai)?\b|^\s*dami(?:\s+ai)?\b/i;
 
