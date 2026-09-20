@@ -1,3 +1,4 @@
+// Sahara competition streaming TTS endpoint.
 import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 
