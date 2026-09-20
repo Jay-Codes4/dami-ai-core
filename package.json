@@ -1,7 +1,7 @@
 {
   "name": "dami-ai-core",
   "version": "0.1.0",
-  "description": "Dami AI, a voice-first African legal assistant",
+  "description": "Dami AI, a voice-first, code-switching African legal assistant",
   "author": "Dami AI",
   "private": true,
   "sideEffects": false,
